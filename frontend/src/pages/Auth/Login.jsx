@@ -1,6 +1,12 @@
+import { useState } from "react";
 import AuthLayout from "../../components/layout/AuthLayout";
+import Input from "../../components/ui/Input";
+import Button from "../../components/ui/Button";
 
 export default function Login() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
   return (
     <AuthLayout>
       <div className="bg-white shadow-xl rounded-2xl w-[420px] p-10">
@@ -8,33 +14,27 @@ export default function Login() {
           RetailFlow POS
         </h1>
 
-        <p className="text-center text-gray-500 mt-2">
+        <p className="text-center text-gray-500 mt-2 mb-8">
           Smart Billing & Inventory Management
         </p>
 
-        <div className="mt-8">
-          <label className="block font-medium">Email</label>
+        <Input
+          label="Email"
+          type="email"
+          placeholder="Enter your email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
 
-          <input
-            type="email"
-            placeholder="Enter email"
-            className="w-full mt-2 border rounded-lg px-4 py-3"
-          />
-        </div>
+        <Input
+          label="Password"
+          type="password"
+          placeholder="Enter your password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-        <div className="mt-5">
-          <label className="block font-medium">Password</label>
-
-          <input
-            type="password"
-            placeholder="Enter password"
-            className="w-full mt-2 border rounded-lg px-4 py-3"
-          />
-        </div>
-
-        <button className="w-full mt-8 bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700">
-          Login
-        </button>
+        <Button>Login</Button>
       </div>
     </AuthLayout>
   );

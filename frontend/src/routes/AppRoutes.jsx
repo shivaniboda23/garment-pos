@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Login from "../pages/Auth/Login";
+import Billing from "../pages/Billing/Billing";
 
 export default function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Login />} />
+        <Route path="/" element={<Billing />} />
       </Routes>
     </BrowserRouter>
   );
