@@ -1,17 +1,14 @@
 const pool = require("../config/db");
 
-// ==========================================
+// ======================================================
 // GET PRODUCTS
 // Supports:
 // /api/products
-// /api/products?school=Sri Chaitanya
-// /api/products?school=Sri Chaitanya&category=Uniform
-// ==========================================
+// /api/products?school=...
+// /api/products?category=...
+// ======================================================
 exports.getProducts = async (req, res) => {
   try {
-    console.log("==================================");
-    console.log("Incoming Query:", req.query);
-
     const { school, category, search } = req.query;
 
     let query = `
@@ -38,52 +35,109 @@ exports.getProducts = async (req, res) => {
 
     if (school) {
       values.push(school);
-      query += ` AND school = $${values.length}`;
+      query += ` AND school=$${values.length}`;
     }
 
     if (category) {
       values.push(category);
-      query += ` AND category = $${values.length}`;
+      query += ` AND category=$${values.length}`;
     }
 
     if (search) {
       values.push(`%${search}%`);
+
       query += `
-        AND (
-          LOWER(product_name) LIKE LOWER($${values.length})
-          OR LOWER(barcode) LIKE LOWER($${values.length})
-          OR LOWER(sku) LIKE LOWER($${values.length})
-        )
+      AND
+      (
+        LOWER(product_name) LIKE LOWER($${values.length})
+        OR LOWER(barcode) LIKE LOWER($${values.length})
+        OR LOWER(sku) LIKE LOWER($${values.length})
+      )
       `;
     }
 
     query += `
-      ORDER BY school, category, product_name, size
+      ORDER BY
+      school,
+      category,
+      product_name,
+      size
     `;
 
-    console.log("SQL:");
-    console.log(query);
-
-    console.log("VALUES:");
-    console.log(values);
-
     const result = await pool.query(query, values);
-
-    console.log("ROWS:");
-    console.log(result.rows);
 
     res.json(result.rows);
 
   } catch (err) {
+
     console.error(err);
-    res.status(500).json({ message: "Failed to fetch products" });
+
+    res.status(500).json({
+      message: "Failed to fetch products",
+    });
+
   }
 };
 
-// ==========================================
+// ======================================================
+// GET ALL SIZE VARIANTS OF A PRODUCT
+// ======================================================
+exports.getProductVariants = async (req, res) => {
+
+  try {
+
+    const {
+      product_name,
+      school,
+      category,
+    } = req.query;
+
+    const result = await pool.query(
+      `
+      SELECT
+        id,
+        barcode,
+        sku,
+        product_name,
+        school,
+        category,
+        size,
+        color,
+        selling_price,
+        stock
+      FROM products
+      WHERE
+        product_name=$1
+        AND school=$2
+        AND category=$3
+      ORDER BY size
+      `,
+      [
+        product_name,
+        school,
+        category,
+      ]
+    );
+
+    res.json(result.rows);
+
+  } catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      message: "Failed to fetch variants",
+    });
+
+  }
+
+};
+
+// ======================================================
 // ADD PRODUCT
-// ==========================================
+// ======================================================
 exports.addProduct = async (req, res) => {
+
   try {
 
     const {
@@ -149,12 +203,14 @@ exports.addProduct = async (req, res) => {
     });
 
   }
+
 };
 
-// ==========================================
+// ======================================================
 // UPDATE PRODUCT
-// ==========================================
+// ======================================================
 exports.updateProduct = async (req, res) => {
+
   try {
 
     const { id } = req.params;
@@ -227,12 +283,14 @@ exports.updateProduct = async (req, res) => {
     });
 
   }
+
 };
 
-// ==========================================
+// ======================================================
 // DELETE PRODUCT
-// ==========================================
+// ======================================================
 exports.deleteProduct = async (req, res) => {
+
   try {
 
     const { id } = req.params;
@@ -243,9 +301,11 @@ exports.deleteProduct = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+
       return res.status(404).json({
         message: "Product not found",
       });
+
     }
 
     res.json({
@@ -262,4 +322,5 @@ exports.deleteProduct = async (req, res) => {
     });
 
   }
+
 };

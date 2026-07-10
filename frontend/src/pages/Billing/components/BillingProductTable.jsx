@@ -1,9 +1,44 @@
+import { useState } from "react";
 import { Trash2 } from "lucide-react";
+
 import { useBilling } from "../../../context/BillingContext";
+import { getProductVariants } from "../../../services/productService";
 
 export default function BillingProductTable() {
   const { state, dispatch } = useBilling();
 
+  const [variantCache, setVariantCache] = useState({});
+
+  // ==========================
+  // Load variants only once
+  // ==========================
+  const loadVariants = async (item) => {
+    const key = `${item.product_name}_${item.school}_${item.category}`;
+
+    if (variantCache[key]) return variantCache[key];
+
+    try {
+      const variants = await getProductVariants(
+        item.product_name,
+        item.school,
+        item.category
+      );
+
+      setVariantCache((prev) => ({
+        ...prev,
+        [key]: variants,
+      }));
+
+      return variants;
+    } catch (err) {
+      console.error(err);
+      return [];
+    }
+  };
+
+  // ==========================
+  // Increase Qty
+  // ==========================
   const increaseQty = (item) => {
     dispatch({
       type: "UPDATE_ITEM_QTY",
@@ -14,6 +49,9 @@ export default function BillingProductTable() {
     });
   };
 
+  // ==========================
+  // Decrease Qty
+  // ==========================
   const decreaseQty = (item) => {
     if (item.qty <= 1) return;
 
@@ -26,10 +64,64 @@ export default function BillingProductTable() {
     });
   };
 
+  // ==========================
+  // Delete Item
+  // ==========================
   const removeItem = (id) => {
     dispatch({
       type: "REMOVE_ITEM",
       payload: id,
+    });
+  };
+
+  // ==========================
+  // Change Status
+  // ==========================
+  const changeStatus = (item, status) => {
+    dispatch({
+      type: "UPDATE_ITEM_STATUS",
+      payload: {
+        id: item.id,
+        status,
+      },
+    });
+  };
+
+  // ==========================
+  // Change Size
+  // ==========================
+  const changeSize = async (item, size) => {
+    const variants = await loadVariants(item);
+
+    const selected = variants.find(
+      (v) => v.size === size
+    );
+
+    if (!selected) return;
+
+    dispatch({
+      type: "UPDATE_ITEM_SIZE",
+      payload: {
+        oldId: item.id,
+
+        newItem: {
+          ...item,
+
+          id: selected.id,
+
+          barcode: selected.barcode,
+
+          sku: selected.sku,
+
+          size: selected.size,
+
+          color: selected.color,
+
+          price: Number(selected.selling_price),
+
+          stock: selected.stock,
+        },
+      },
     });
   };
 
@@ -40,18 +132,42 @@ export default function BillingProductTable() {
         Billing Items
       </h2>
 
-      <table className="w-full">
+      <table className="min-w-full border-collapse">
 
         <thead className="bg-blue-50">
 
           <tr>
+
             <th className="border p-2">#</th>
-            <th className="border p-2 text-left">Product</th>
-            <th className="border p-2">Size</th>
-            <th className="border p-2">Qty</th>
-            <th className="border p-2">Price</th>
-            <th className="border p-2">Total</th>
-            <th className="border p-2">Action</th>
+
+            <th className="border p-2 text-left">
+              Product
+            </th>
+
+            <th className="border p-2">
+              Size
+            </th>
+
+            <th className="border p-2">
+              Qty
+            </th>
+
+            <th className="border p-2">
+              Price
+            </th>
+
+            <th className="border p-2">
+              Amount
+            </th>
+
+            <th className="border p-2">
+              Status
+            </th>
+
+            <th className="border p-2">
+              Action
+            </th>
+
           </tr>
 
         </thead>
@@ -59,25 +175,38 @@ export default function BillingProductTable() {
         <tbody>
 
           {state.items.length === 0 ? (
+
             <tr>
+
               <td
-                colSpan={7}
+                colSpan={8}
                 className="text-center p-8 text-gray-500"
               >
                 No Products Added
               </td>
+
             </tr>
+
           ) : (
+
             state.items.map((item, index) => {
 
-              const total = item.qty * item.price;
+              const key = `${item.product_name}_${item.school}_${item.category}`;
 
-              return (
-                <tr key={item.id}>
+              const variants =
+                variantCache[key] || [];
+
+              const amount =
+                item.qty * item.price;
+                              return (
+
+                <tr key={`${item.id}_${index}`}>
 
                   <td className="border p-2 text-center">
                     {index + 1}
                   </td>
+
+                  {/* Product */}
 
                   <td className="border p-2">
 
@@ -91,9 +220,49 @@ export default function BillingProductTable() {
 
                   </td>
 
-                  <td className="border p-2 text-center">
-                    {item.size}
+                  {/* Size */}
+
+                  <td className="border p-2">
+
+                    <select
+                      value={item.size}
+                      onFocus={() => loadVariants(item)}
+                      onChange={(e) =>
+                        changeSize(item, e.target.value)
+                      }
+                      className="border rounded p-1 w-full"
+                    >
+
+                      {variants.length === 0 ? (
+
+                        <option>
+                          {item.size}
+                        </option>
+
+                      ) : (
+
+                        variants.map((variant) => (
+
+                          <option
+                            key={variant.id}
+                            value={variant.size}
+                            disabled={variant.stock <= 0}
+                          >
+                            {variant.size}
+                            {variant.stock <= 0
+                              ? " (Out)"
+                              : ""}
+                          </option>
+
+                        ))
+
+                      )}
+
+                    </select>
+
                   </td>
+
+                  {/* Quantity */}
 
                   <td className="border p-2">
 
@@ -101,7 +270,7 @@ export default function BillingProductTable() {
 
                       <button
                         onClick={() => decreaseQty(item)}
-                        className="bg-red-500 text-white w-8 h-8 rounded"
+                        className="bg-red-500 hover:bg-red-600 text-white w-8 h-8 rounded"
                       >
                         -
                       </button>
@@ -112,7 +281,7 @@ export default function BillingProductTable() {
 
                       <button
                         onClick={() => increaseQty(item)}
-                        className="bg-green-500 text-white w-8 h-8 rounded"
+                        className="bg-green-500 hover:bg-green-600 text-white w-8 h-8 rounded"
                       >
                         +
                       </button>
@@ -121,13 +290,50 @@ export default function BillingProductTable() {
 
                   </td>
 
+                  {/* Price */}
+
                   <td className="border p-2 text-center">
+
                     ₹ {Number(item.price).toFixed(2)}
+
                   </td>
 
+                  {/* Amount */}
+
                   <td className="border p-2 text-center font-bold text-green-700">
-                    ₹ {Number(total).toFixed(2)}
+
+                    ₹ {Number(amount).toFixed(2)}
+
                   </td>
+
+                  {/* Status */}
+
+                  <td className="border p-2">
+
+                    <select
+                      value={item.status || "Delivered"}
+                      onChange={(e) =>
+                        changeStatus(
+                          item,
+                          e.target.value
+                        )
+                      }
+                      className="border rounded p-1 w-full"
+                    >
+
+                      <option value="Delivered">
+                        Delivered
+                      </option>
+
+                      <option value="Pending">
+                        Pending
+                      </option>
+
+                    </select>
+
+                  </td>
+
+                  {/* Delete */}
 
                   <td className="border p-2 text-center">
 
@@ -141,9 +347,11 @@ export default function BillingProductTable() {
                   </td>
 
                 </tr>
+
               );
 
             })
+
           )}
 
         </tbody>
@@ -151,5 +359,7 @@ export default function BillingProductTable() {
       </table>
 
     </div>
+
   );
+
 }

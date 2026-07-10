@@ -1,6 +1,4 @@
 import { useEffect, useState } from "react";
-import { Search, Package } from "lucide-react";
-
 import { useBilling } from "../../../context/BillingContext";
 
 import { getSchools } from "../../../services/schoolService";
@@ -16,6 +14,7 @@ export default function BillingProductSearch() {
 
   const [selectedSchool, setSelectedSchool] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -63,7 +62,7 @@ export default function BillingProductSearch() {
 
     return (
       product.product_name
-        ?.toLowerCase()
+        .toLowerCase()
         .includes(search.toLowerCase()) ||
       product.barcode
         ?.toLowerCase()
@@ -88,8 +87,8 @@ export default function BillingProductSearch() {
         color: product.color,
         qty: 1,
         price: Number(product.selling_price),
-        gst: Number(product.gst || 0),
         discount: 0,
+        status: "Delivered",
       },
     });
 
@@ -97,31 +96,27 @@ export default function BillingProductSearch() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
+    <div className="bg-white rounded-xl shadow-lg p-5">
 
-      <div className="flex items-center gap-3 mb-6">
+      <h2 className="text-xl font-bold text-blue-700 mb-5">
+        Add Products
+      </h2>
 
-        <Package className="text-blue-600" size={28} />
-
-        <h2 className="text-2xl font-bold text-blue-700">
-          Product Search
-        </h2>
-
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div className="grid md:grid-cols-2 gap-4 mb-4">
 
         <select
           value={selectedSchool}
           onChange={(e) => {
-            setSelectedSchool(e.target.value);
+            const school = e.target.value;
+
+            setSelectedSchool(school);
 
             dispatch({
               type: "SET_SCHOOL",
-              payload: e.target.value,
+              payload: school,
             });
           }}
-          className="border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none"
+          className="border rounded-lg p-3"
         >
           <option value="">All Schools</option>
 
@@ -140,7 +135,7 @@ export default function BillingProductSearch() {
           onChange={(e) =>
             setSelectedCategory(e.target.value)
           }
-          className="border rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none"
+          className="border rounded-lg p-3"
         >
           <option value="">All Categories</option>
 
@@ -156,92 +151,52 @@ export default function BillingProductSearch() {
 
       </div>
 
-      <div className="relative mb-5">
+      <input
+        className="w-full border rounded-lg p-3"
+        placeholder="Search Product / Barcode / SKU..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
 
-        <Search
-          className="absolute left-3 top-3.5 text-gray-400"
-          size={20}
-        />
-
-        <input
-          value={search}
-          onChange={(e) =>
-            setSearch(e.target.value)
-          }
-          placeholder="Search by Product Name, Barcode or SKU..."
-          className="w-full border rounded-xl py-3 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 outline-none"
-        />
-
-      </div>
-
-      <div className="border rounded-xl max-h-96 overflow-y-auto">
+      <div className="mt-4 max-h-96 overflow-y-auto border rounded-lg">
 
         {filteredProducts.length === 0 ? (
-
-          <div className="text-center p-10 text-gray-500">
+          <div className="p-5 text-center text-gray-500">
             No Products Found
           </div>
-
         ) : (
-
           filteredProducts.map((product) => (
-
             <div
               key={product.id}
               onClick={() => addProduct(product)}
-              className="flex justify-between items-center p-4 border-b hover:bg-blue-50 cursor-pointer transition"
+              className="p-4 border-b hover:bg-blue-50 cursor-pointer"
             >
-
-              <div>
-
-                <div className="font-bold text-gray-800">
-                  {product.product_name}
-                </div>
-
-                <div className="text-sm text-gray-500">
-                  {product.school}
-                </div>
-
-                <div className="text-sm text-gray-500">
-                  {product.category}
-                </div>
-
-                <div className="text-xs text-gray-400 mt-1">
-                  SKU : {product.sku}
-                </div>
-
+              <div className="font-semibold">
+                {product.product_name}
               </div>
 
-              <div className="text-right">
+              <div className="text-sm text-gray-500">
+                {product.school}
+              </div>
 
-                <div className="font-bold text-lg text-green-700">
-                  ₹ {Number(product.selling_price).toFixed(2)}
-                </div>
+              <div className="text-sm text-gray-500">
+                {product.category}
+              </div>
 
-                <div className="text-sm">
+              <div className="flex justify-between mt-2">
+                <span>
                   Size : {product.size}
-                </div>
+                </span>
 
-                <div
-                  className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-semibold ${
-                    product.stock > 10
-                      ? "bg-green-100 text-green-700"
-                      : "bg-red-100 text-red-700"
-                  }`}
-                >
-                  Stock : {product.stock}
-                </div>
-
+                <span className="font-semibold text-green-700">
+                  ₹ {Number(product.selling_price).toFixed(2)}
+                </span>
               </div>
-
             </div>
-
           ))
-
         )}
 
       </div>
-
     </div>
   );
 }

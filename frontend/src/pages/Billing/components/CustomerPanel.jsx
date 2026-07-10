@@ -13,70 +13,53 @@ export default function CustomerPanel() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg p-6">
+    <div className="bg-white rounded-xl shadow-lg p-5">
 
       <h2 className="text-xl font-bold text-blue-700 mb-5">
         Customer Details
       </h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
 
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Customer Name
-          </label>
+        <input
+          type="text"
+          placeholder="Customer Name"
+          value={state.customer.name}
+          onChange={(e) =>
+            updateCustomer("name", e.target.value)
+          }
+          className="border rounded-lg p-3"
+        />
 
-          <input
-            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-            placeholder="Enter customer name"
-            value={state.customer?.name || ""}
-            onChange={(e) =>
-              updateCustomer("name", e.target.value)
-            }
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Mobile Number"
+          value={state.customer.mobile}
+          onChange={(e) =>
+            updateCustomer("mobile", e.target.value)
+          }
+          className="border rounded-lg p-3"
+        />
 
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Mobile Number
-          </label>
+        <input
+          type="text"
+          placeholder="School / College"
+          value={state.customer.school}
+          onChange={(e) =>
+            updateCustomer("school", e.target.value)
+          }
+          className="border rounded-lg p-3 bg-gray-50"
+        />
 
-          <input
-            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-            placeholder="9876543210"
-            value={state.customer?.mobile || ""}
-            onChange={(e) =>
-              updateCustomer("mobile", e.target.value)
-            }
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            School
-          </label>
-
-          <input
-            className="w-full border rounded-lg p-3 bg-gray-100"
-            value={state.selectedSchool || "Not Selected"}
-            readOnly
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">
-            Remarks
-          </label>
-
-          <input
-            className="w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
-            placeholder="Optional remarks"
-            value={state.customer?.remarks || ""}
-            onChange={(e) =>
-              updateCustomer("remarks", e.target.value)
-            }
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Remarks"
+          value={state.customer.remarks}
+          onChange={(e) =>
+            updateCustomer("remarks", e.target.value)
+          }
+          className="border rounded-lg p-3"
+        />
 
       </div>
 
