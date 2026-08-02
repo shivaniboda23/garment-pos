@@ -1,20 +1,61 @@
 @import "tailwindcss";
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
 }
 
-html,
-body,
-#root {
-  width: 100%;
-  min-height: 100%;
-  font-family: Arial, Helvetica, sans-serif;
-  background-color: #f3f4f6;
+html{
+  scroll-behavior:smooth;
 }
 
-body {
-  color: #111827;
+body{
+  font-family:'Inter',sans-serif;
+  background:#F5F7FB;
+  color:#0F172A;
+}
+
+button{
+  cursor:pointer;
+}
+
+::-webkit-scrollbar{
+  width:8px;
+}
+
+::-webkit-scrollbar-thumb{
+  background:#CBD5E1;
+  border-radius:20px;
+}
+
+.glass{
+  background:rgba(255,255,255,.75);
+  backdrop-filter:blur(20px);
+}
+
+.shadow-soft{
+  box-shadow:
+  0 10px 40px rgba(15,23,42,.08);
+}
+
+.shadow-card{
+  box-shadow:
+  0 20px 60px rgba(15,23,42,.06);
+}
+
+.gradient-primary{
+  background:linear-gradient(
+      135deg,
+      #2563EB,
+      #4F46E5
+  );
+}
+
+.gradient-card{
+  background:linear-gradient(
+      135deg,
+      white,
+      #F8FAFC
+  );
 }

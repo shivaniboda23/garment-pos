@@ -153,16 +153,60 @@ export function billingReducer(state, action) {
     // =====================================
 
     case "UPDATE_ITEM_SIZE": {
-      const updatedItems = state.items.map((item) =>
-        item.id === action.payload.oldId
-          ? {
-              ...action.payload.newItem,
-              qty: item.qty,
-              discount: item.discount,
-              status: item.status,
-            }
-          : item
+      const { oldId, newItem } = action.payload;
+
+      const currentItem = state.items.find(
+        (item) => item.id === oldId
       );
+
+      if (!currentItem) return state;
+
+      // Check if selected variant already exists in bill
+      const existingVariant = state.items.find(
+        (item) =>
+        item.id === newItem.id &&
+        item.id !== oldId
+      );
+
+      let updatedItems;
+
+      if (existingVariant) {
+        // Merge quantities instead of creating duplicate rows
+        updatedItems = state.items
+          .filter((item) => item.id !== oldId)
+          .map((item) =>
+            item.id === newItem.id
+              ? {
+                  ...item,
+                  qty: item.qty + currentItem.qty,
+                }
+              : item
+          );
+      } else {
+        updatedItems = state.items.map((item) =>
+          item.id === oldId
+            ? {
+                ...item,
+
+                id: newItem.id,
+                barcode: newItem.barcode,
+                sku: newItem.sku,
+
+                size: newItem.size,
+                color: newItem.color,
+
+                price: Number(newItem.price),
+                stock: Number(newItem.stock),
+
+                variants: newItem.variants || item.variants,
+
+                qty: item.qty,
+                    discount: item.discount,
+                status: item.status,
+              }
+            : item
+        );
+      }
 
       return {
         ...state,
@@ -173,7 +217,6 @@ export function billingReducer(state, action) {
         ),
       };
     }
-
     // =====================================
     // STATUS
     // =====================================

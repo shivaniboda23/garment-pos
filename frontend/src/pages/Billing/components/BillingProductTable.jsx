@@ -194,8 +194,9 @@ export default function BillingProductTable() {
               const key = `${item.product_name}_${item.school}_${item.category}`;
 
               const variants =
-                variantCache[key] || [];
-
+                item.variants ||
+                variantCache[key] ||
+                [];
               const amount =
                 item.qty * item.price;
                               return (
@@ -215,7 +216,11 @@ export default function BillingProductTable() {
                     </div>
 
                     <div className="text-xs text-gray-500">
-                      {item.barcode}
+                      Barcode : {item.barcode}
+                    </div>
+
+                    <div className="text-xs text-blue-600">
+                      Stock : {item.stock}
                     </div>
 
                   </td>
@@ -232,32 +237,20 @@ export default function BillingProductTable() {
                       }
                       className="border rounded p-1 w-full"
                     >
-
-                      {variants.length === 0 ? (
-
-                        <option>
-                          {item.size}
+                      {variants.map((variant) => (
+                        <option
+                          key={variant.id}
+                          value={variant.size}
+                          disabled={variant.stock <= 0}
+                        >
+                          {variant.size}
+                          {" | "}
+                          ₹{variant.selling_price}
+                          {" | "}
+                          Stock {variant.stock}
+                          {variant.stock <= 0 ? " (Out)" : ""}
                         </option>
-
-                      ) : (
-
-                        variants.map((variant) => (
-
-                          <option
-                            key={variant.id}
-                            value={variant.size}
-                            disabled={variant.stock <= 0}
-                          >
-                            {variant.size}
-                            {variant.stock <= 0
-                              ? " (Out)"
-                              : ""}
-                          </option>
-
-                        ))
-
-                      )}
-
+                      ))}
                     </select>
 
                   </td>
@@ -294,7 +287,13 @@ export default function BillingProductTable() {
 
                   <td className="border p-2 text-center">
 
-                    ₹ {Number(item.price).toFixed(2)}
+                    <div className="font-semibold">
+                      ₹ {Number(item.price).toFixed(2)}
+                    </div>
+
+                    <div className="text-xs text-gray-500">
+                      {item.sku}
+                    </div>
 
                   </td>
 

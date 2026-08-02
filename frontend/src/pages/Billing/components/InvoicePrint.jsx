@@ -9,10 +9,6 @@ const InvoicePrint = forwardRef((props, ref) => {
     (item) => item.status === "Pending"
   );
 
-  const deliveredItems = state.items.filter(
-    (item) => item.status !== "Pending"
-  );
-
   const totalItems = state.items.reduce(
     (sum, item) => sum + Number(item.qty),
     0
@@ -47,16 +43,17 @@ const InvoicePrint = forwardRef((props, ref) => {
 
         <div
           style={{
-            width: 60,
-            height: 60,
+            width: 55,
+            height: 55,
             borderRadius: "50%",
-            border: "3px solid black",
+            background: "#111",
+            color: "#fff",
             margin: "0 auto 8px",
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            fontSize: 26,
             fontWeight: "bold",
+            fontSize: 24,
           }}
         >
           BG
@@ -199,6 +196,10 @@ const InvoicePrint = forwardRef((props, ref) => {
               Amount
             </th>
 
+            <th align="center">
+              Status
+            </th>
+
           </tr>
 
         </thead>
@@ -235,6 +236,10 @@ const InvoicePrint = forwardRef((props, ref) => {
 
       <td align="right">
         ₹{Number(amount).toFixed(0)}
+      </td>
+
+      <td align="center">
+        {item.status}
       </td>
 
     </tr>
@@ -382,6 +387,10 @@ const InvoicePrint = forwardRef((props, ref) => {
           </th>
 
           <th align="center">
+            Size
+          </th>
+
+          <th align="center">
             Qty
           </th>
 
@@ -395,20 +404,10 @@ const InvoicePrint = forwardRef((props, ref) => {
 
           <tr key={item.id}>
 
-            <td>
+            <td>{item.product_name}</td>
 
-              {item.product_name}
-
-              <br />
-
-              <span
-                style={{
-                  fontSize: 10,
-                }}
-              >
-                {item.size}
-              </span>
-
+            <td align="center">
+              {item.size}
             </td>
 
             <td align="center">

@@ -3,7 +3,10 @@ import { useBilling } from "../../../context/BillingContext";
 
 import { getSchools } from "../../../services/schoolService";
 import { getCategories } from "../../../services/categoryService";
-import { getProducts } from "../../../services/productService";
+import {
+  getProducts,
+  getProductVariants,
+} from "../../../services/productService";
 
 export default function BillingProductSearch() {
   const { dispatch } = useBilling();
@@ -73,27 +76,67 @@ export default function BillingProductSearch() {
     );
   });
 
-  const addProduct = (product) => {
+  // =====================================
+// REMOVE DUPLICATE PRODUCTS
+// =====================================
+
+const uniqueProducts = [
+  ...new Map(
+    filteredProducts.map((product) => [
+      `${product.product_name}-${product.school}-${product.category}`,
+      product,
+    ])
+  ).values(),
+];
+
+  const addProduct = async (product) => {
+  try {
+    const variants = await getProductVariants(
+      product.product_name,
+      product.school,
+      product.category
+    );
+
+    const selectedVariant =
+      variants.find((v) => v.id === product.id) ||
+      variants[0];
+
     dispatch({
       type: "ADD_ITEM",
       payload: {
-        id: product.id,
-        barcode: product.barcode,
-        sku: product.sku,
-        product_name: product.product_name,
-        school: product.school,
-        category: product.category,
-        size: product.size,
-        color: product.color,
+        id: selectedVariant.id,
+
+        barcode: selectedVariant.barcode,
+        sku: selectedVariant.sku,
+
+        product_name: selectedVariant.product_name,
+
+        school: selectedVariant.school,
+        category: selectedVariant.category,
+
+        size: selectedVariant.size,
+        color: selectedVariant.color,
+
         qty: 1,
-        price: Number(product.selling_price),
+
+        price: Number(selectedVariant.selling_price),
+
         discount: 0,
+
         status: "Delivered",
+
+        stock: selectedVariant.stock,
+
+        variants,
       },
     });
 
     setSearch("");
-  };
+
+  } catch (err) {
+    console.error(err);
+  }
+};
 
   return (
     <div className="bg-white rounded-xl shadow-lg p-5">
@@ -158,45 +201,55 @@ export default function BillingProductSearch() {
         onChange={(e) => setSearch(e.target.value)}
       />
 
-      <div className="mt-4 max-h-96 overflow-y-auto border rounded-lg">
+      {search.trim() && (
 
-        {filteredProducts.length === 0 ? (
-          <div className="p-5 text-center text-gray-500">
+      <div className="mt-2 bg-white border rounded-lg shadow-lg max-h-72 overflow-y-auto">
+
+        {uniqueProducts.length === 0 ? (
+
+          <div className="p-4 text-gray-500">
+
             No Products Found
+
           </div>
+
         ) : (
-          filteredProducts.map((product) => (
+
+          uniqueProducts.map((product) => (
+
             <div
-              key={product.id}
+              key={`${product.product_name}-${product.school}-${product.category}`}
               onClick={() => addProduct(product)}
               className="p-4 border-b hover:bg-blue-50 cursor-pointer"
             >
+
               <div className="font-semibold">
+
                 {product.product_name}
+
               </div>
 
               <div className="text-sm text-gray-500">
+
                 {product.school}
+
               </div>
 
               <div className="text-sm text-gray-500">
+
                 {product.category}
+
               </div>
 
-              <div className="flex justify-between mt-2">
-                <span>
-                  Size : {product.size}
-                </span>
-
-                <span className="font-semibold text-green-700">
-                  ₹ {Number(product.selling_price).toFixed(2)}
-                </span>
-              </div>
             </div>
+
           ))
+
         )}
 
       </div>
+
+      )}
     </div>
   );
 }
