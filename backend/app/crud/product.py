@@ -2,10 +2,10 @@ import random
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from sqlalchemy.orm import Session, joinedload
+
 
 from app.models.product import Product
-from app.models.product_variant import ProductVariant
+
 
 
 # --------------------------------------------------
@@ -120,36 +120,19 @@ def delete_product(db: Session, product_id: int, shop_id: int):
 # Search Products
 # --------------------------------------------------
 def search_products(db: Session, keyword: str, shop_id: int):
-def search_products(db: Session, keyword: str, shop_id: int) -> list[ProductVariant]:
-    """
-    Searches across Products and ProductVariants by name, code, SKU, or barcode.
-    Returns a list of matching ProductVariant objects, as they are the
-    sellable/purchasable units.
-    """
-    search_term = f"%{keyword.strip()}%"
-
     keyword = keyword.strip()
+    search_term = f"%{keyword}%"
 
     return (
         db.query(Product)
-        db.query(ProductVariant)
-        .join(ProductVariant.product)
         .filter(
             Product.shop_id == shop_id,
             or_(
-                Product.product_name.ilike(f"%{keyword}%"),
-                Product.product_code.ilike(f"%{keyword}%"),
                 Product.product_name.ilike(search_term),
                 Product.product_code.ilike(search_term),
-                ProductVariant.sku.ilike(search_term),
-                ProductVariant.barcode.ilike(search_term),
             ),
         )
         .order_by(Product.product_name)
         .limit(20)
         .all()
-        .options(joinedload(ProductVariant.product), joinedload(ProductVariant.stock))
-        .order_by(Product.product_name, ProductVariant.size)
-        .limit(25)
-        .all(),
     )
