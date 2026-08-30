@@ -23,6 +23,16 @@ class Bill(Base):
         index=True,
     )
 
+    sale_id = Column(
+        Integer,
+        ForeignKey(
+            "sales.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=True,
+        unique=True,
+    )
+
     invoice_number = Column(
         String(30),
         unique=True,
@@ -31,13 +41,17 @@ class Bill(Base):
 
     shop_id = Column(
         Integer,
-        ForeignKey("shops.id"),
+        ForeignKey(
+            "shops.id",
+        ),
         nullable=False,
     )
 
     customer_id = Column(
         Integer,
-        ForeignKey("customers.id"),
+        ForeignKey(
+            "customers.id",
+        ),
         nullable=True,
     )
 
@@ -99,6 +113,12 @@ class Bill(Base):
     customer = relationship(
         "Customer",
         back_populates="bills",
+    )
+
+    sale = relationship(
+        "Sale",
+        back_populates="bill",
+        uselist=False,
     )
 
     items = relationship(

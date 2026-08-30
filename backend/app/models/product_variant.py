@@ -112,6 +112,16 @@ class ProductVariant(Base):
         "BillItem",
         back_populates="variant",
     )
+
+    purchase_items = relationship(
+        "PurchaseItem",
+        back_populates="variant",
+    )
+
+    sale_return_items = relationship(
+        "SaleReturnItem",
+        back_populates="variant",
+    )
     # -------------------------
     # Virtual quantity field
     # -------------------------

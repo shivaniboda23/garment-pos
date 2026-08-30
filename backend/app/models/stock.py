@@ -30,27 +30,53 @@ class Stock(Base):
         unique=True,
     )
 
-    # Manufactured Stock
+    # ==========================================================
+    # STOCK QUANTITIES
+    # ==========================================================
+
+    # Manufactured / K Stock
     k_stock = Column(
         Integer,
         nullable=False,
         default=0,
     )
 
-    # Ready-made Stock
+    # Ready-made / R Stock
     r_stock = Column(
         Integer,
         nullable=False,
         default=0,
     )
 
+    # ==========================================================
+    # STOCK THRESHOLDS
+    # ==========================================================
+
+    # Minimum TOTAL stock
     minimum_stock = Column(
         Integer,
+        nullable=False,
         default=0,
     )
 
+    # Minimum K stock
+    k_minimum_stock = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    # Minimum R stock
+    r_minimum_stock = Column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
+    # Maximum TOTAL stock
     maximum_stock = Column(
         Integer,
+        nullable=False,
         default=0,
     )
 
@@ -64,6 +90,10 @@ class Stock(Base):
         "ProductVariant",
         back_populates="stock",
     )
+
+    # ==========================================================
+    # TOTAL QUANTITY
+    # ==========================================================
 
     @property
     def quantity(self):

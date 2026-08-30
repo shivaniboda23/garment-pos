@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
@@ -7,56 +8,271 @@ from app.models.customer import Customer
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
 from app.models.purchase import Purchase
+from app.models.purchase_return import PurchaseReturn
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
+from app.models.sale_return import SaleReturn
+from app.models.sale_return_item import SaleReturnItem
 from app.models.stock import Stock
 from app.models.supplier import Supplier
+from app.models.expense import Expense
 
 
 # ==========================================================
-# Dashboard Summary
+# DASHBOARD COGS HELPERS
+# ==========================================================
+
+def _get_cogs_for_date(
+    db: Session,
+    shop_id: int,
+    target_date: date,
+):
+    sales = (
+        db.query(Sale.id)
+        .filter(
+            Sale.shop_id == shop_id,
+            func.date(
+                Sale.created_at
+            ) == target_date,
+        )
+        .all()
+    )
+
+    sale_ids = [
+        row.id
+        for row in sales
+    ]
+
+    if not sale_ids:
+        return Decimal("0.00")
+
+    sale_items = (
+        db.query(SaleItem)
+        .filter(
+            SaleItem.sale_id.in_(sale_ids)
+        )
+        .all()
+    )
+
+    total_cogs = Decimal("0.00")
+
+    for item in sale_items:
+        total_cogs += (
+            Decimal(
+                str(item.cost_price or 0)
+            )
+            * Decimal(item.quantity)
+        )
+
+    returned_rows = (
+        db.query(
+            SaleReturnItem,
+            SaleItem.cost_price,
+        )
+        .join(
+            SaleReturn,
+            SaleReturnItem.sale_return_id
+            == SaleReturn.id,
+        )
+        .join(
+            SaleItem,
+            (
+                SaleItem.sale_id
+                == SaleReturn.sale_id
+            )
+            & (
+                SaleItem.variant_id
+                == SaleReturnItem.variant_id
+            ),
+        )
+        .filter(
+            SaleReturn.shop_id == shop_id,
+            SaleReturn.status == "Completed",
+            SaleReturn.sale_id.in_(sale_ids),
+        )
+        .all()
+    )
+
+    returned_cogs = Decimal("0.00")
+
+    for return_item, cost_price in returned_rows:
+        returned_cogs += (
+            Decimal(
+                str(cost_price or 0)
+            )
+            * Decimal(return_item.quantity)
+        )
+
+    net_cogs = (
+        total_cogs
+        - returned_cogs
+    )
+
+    if net_cogs < 0:
+        return Decimal("0.00")
+
+    return net_cogs
+
+
+# ==========================================================
+# DASHBOARD SUMMARY
 # ==========================================================
 
 def get_dashboard_summary(
     db: Session,
     shop_id: int,
 ):
-
     today = date.today()
 
-    today_sales = (
-        db.query(func.coalesce(func.sum(Sale.total_amount), 0))
-        .filter(
-            Sale.shop_id == shop_id,
-            func.date(Sale.created_at) == today,
+    today_sales = Decimal(
+        str(
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        Sale.total_amount
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                Sale.shop_id == shop_id,
+                func.date(
+                    Sale.created_at
+                ) == today,
+            )
+            .scalar()
+            or 0
         )
-        .scalar()
     )
 
-    today_purchase = (
-        db.query(func.coalesce(func.sum(Purchase.grand_total), 0))
-        .filter(
-            Purchase.shop_id == shop_id,
-            func.date(Purchase.created_at) == today,
+    today_sales_return = Decimal(
+        str(
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        SaleReturn.refund_amount
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                SaleReturn.shop_id == shop_id,
+                SaleReturn.status == "Completed",
+                func.date(
+                    SaleReturn.created_at
+                ) == today,
+            )
+            .scalar()
+            or 0
         )
-        .scalar()
+    )
+
+    today_purchase = Decimal(
+        str(
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        Purchase.grand_total
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                Purchase.shop_id == shop_id,
+                func.date(
+                    Purchase.created_at
+                ) == today,
+            )
+            .scalar()
+            or 0
+        )
+    )
+
+    today_purchase_return = Decimal(
+        str(
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        PurchaseReturn.total_amount
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                PurchaseReturn.shop_id == shop_id,
+                PurchaseReturn.status == "Completed",
+                func.date(
+                    PurchaseReturn.created_at
+                ) == today,
+            )
+            .scalar()
+            or 0
+        )
+    )
+
+    today_expense = Decimal(
+        str(
+            db.query(
+                func.coalesce(
+                    func.sum(
+                        Expense.amount
+                    ),
+                    0,
+                )
+            )
+            .filter(
+                Expense.shop_id == shop_id,
+                func.date(
+                    Expense.created_at
+                ) == today,
+            )
+            .scalar()
+            or 0
+        )
+    )
+
+    today_net_sales = (
+        today_sales
+        - today_sales_return
+    )
+
+    today_cogs = _get_cogs_for_date(
+        db=db,
+        shop_id=shop_id,
+        target_date=today,
+    )
+
+    today_gross_profit = (
+        today_net_sales
+        - today_cogs
+    )
+
+    today_profit = (
+        today_gross_profit
+        - today_expense
     )
 
     total_products = (
         db.query(Product)
-        .filter(Product.shop_id == shop_id)
+        .filter(
+            Product.shop_id == shop_id
+        )
         .count()
     )
 
     total_customers = (
         db.query(Customer)
-        .filter(Customer.shop_id == shop_id)
+        .filter(
+            Customer.shop_id == shop_id
+        )
         .count()
     )
 
     total_suppliers = (
         db.query(Supplier)
-        .filter(Supplier.shop_id == shop_id)
+        .filter(
+            Supplier.shop_id == shop_id
+        )
         .count()
     )
 
@@ -67,8 +283,9 @@ def get_dashboard_summary(
         .filter(
             Product.shop_id == shop_id,
             (
-                Stock.k_stock + Stock.r_stock
-            ) <= ProductVariant.reorder_level
+                Stock.k_stock
+                + Stock.r_stock
+            ) <= ProductVariant.reorder_level,
         )
         .count()
     )
@@ -84,8 +301,18 @@ def get_dashboard_summary(
 
     return {
         "today_sales": today_sales,
+        "today_sales_return": today_sales_return,
+        "today_net_sales": today_net_sales,
         "today_purchase": today_purchase,
-        "today_profit": today_sales - today_purchase,
+        "today_purchase_return": today_purchase_return,
+        "today_net_purchase": (
+            today_purchase
+            - today_purchase_return
+        ),
+        "today_cogs": today_cogs,
+        "today_gross_profit": today_gross_profit,
+        "today_expense": today_expense,
+        "today_profit": today_profit,
         "total_customers": total_customers,
         "total_suppliers": total_suppliers,
         "total_products": total_products,
@@ -95,14 +322,13 @@ def get_dashboard_summary(
 
 
 # ==========================================================
-# Low Stock
+# LOW STOCK
 # ==========================================================
 
 def get_low_stock_products(
     db: Session,
     shop_id: int,
 ):
-
     result = (
         db.query(
             Product.id.label("product_id"),
@@ -112,8 +338,8 @@ def get_low_stock_products(
             Stock.k_stock,
             Stock.r_stock,
             (
-                Stock.k_stock +
-                Stock.r_stock
+                Stock.k_stock
+                + Stock.r_stock
             ).label("total_stock"),
             ProductVariant.reorder_level,
         )
@@ -128,15 +354,15 @@ def get_low_stock_products(
         )
         .filter(
             Product.shop_id == shop_id,
-             (
-                Stock.k_stock +
-                Stock.r_stock
+            (
+                Stock.k_stock
+                + Stock.r_stock
             ) <= ProductVariant.reorder_level,
         )
         .order_by(
             (
-                Stock.k_stock +
-                Stock.r_stock
+                Stock.k_stock
+                + Stock.r_stock
             ).asc()
         )
         .all()
@@ -156,20 +382,22 @@ def get_low_stock_products(
         for row in result
     ]
 
+
 # ==========================================================
-# Top Selling Products
+# TOP SELLING PRODUCTS
 # ==========================================================
 
 def get_top_selling_products(
     db: Session,
     shop_id: int,
 ):
-
     result = (
         db.query(
             Product.product_name,
             ProductVariant.sku,
-            func.sum(SaleItem.quantity).label("quantity_sold"),
+            func.sum(
+                SaleItem.quantity
+            ).label("quantity_sold"),
         )
         .join(
             ProductVariant,
@@ -191,7 +419,9 @@ def get_top_selling_products(
             ProductVariant.sku,
         )
         .order_by(
-            func.sum(SaleItem.quantity).desc()
+            func.sum(
+                SaleItem.quantity
+            ).desc()
         )
         .limit(10)
         .all()
@@ -201,21 +431,22 @@ def get_top_selling_products(
         {
             "product_name": row.product_name,
             "sku": row.sku,
-            "quantity_sold": int(row.quantity_sold),
+            "quantity_sold": int(
+                row.quantity_sold
+            ),
         }
         for row in result
     ]
 
 
 # ==========================================================
-# Recent Sales
+# RECENT SALES
 # ==========================================================
 
 def get_recent_sales(
     db: Session,
     shop_id: int,
 ):
-
     return (
         db.query(Sale)
         .options(
@@ -233,14 +464,13 @@ def get_recent_sales(
 
 
 # ==========================================================
-# Recent Purchases
+# RECENT PURCHASES
 # ==========================================================
 
 def get_recent_purchases(
     db: Session,
     shop_id: int,
 ):
-
     return (
         db.query(Purchase)
         .options(
@@ -258,14 +488,13 @@ def get_recent_purchases(
 
 
 # ==========================================================
-# Monthly Sales
+# MONTHLY SALES
 # ==========================================================
 
 def get_monthly_sales(
     db: Session,
     shop_id: int,
 ):
-
     result = (
         db.query(
             func.to_char(
@@ -286,7 +515,9 @@ def get_monthly_sales(
             )
         )
         .order_by(
-            func.min(Sale.created_at)
+            func.min(
+                Sale.created_at
+            )
         )
         .all()
     )
@@ -294,7 +525,9 @@ def get_monthly_sales(
     return [
         {
             "month": row.month,
-            "sales": float(row.sales),
+            "sales": float(
+                row.sales or 0
+            ),
         }
         for row in result
     ]

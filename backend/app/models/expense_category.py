@@ -52,5 +52,4 @@ class ExpenseCategory(Base):
     expenses = relationship(
         "Expense",
         back_populates="category",
-        cascade="all, delete-orphan",
     )

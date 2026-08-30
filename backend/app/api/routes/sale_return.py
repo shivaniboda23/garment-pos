@@ -20,6 +20,7 @@ from app.crud.sale_return import (
     get_sale_return_by_id,
 )
 
+
 router = APIRouter(
     prefix="/sale-return",
     tags=["Sale Return"],
@@ -41,13 +42,24 @@ def create_sale_return_api(
 
     shop_id = TEMP_SHOP_ID
 
-    sale_return = create_sale_return(
-        db=db,
-        shop_id=shop_id,
-        data=request,
-    )
+    try:
 
-    return sale_return
+        sale_return = create_sale_return(
+            db=db,
+            shop_id=shop_id,
+            data=request,
+        )
+
+        return sale_return
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        )
 
 
 # =====================================================
@@ -61,12 +73,10 @@ def sale_return_history(
 
     shop_id = TEMP_SHOP_ID
 
-    returns = get_all_sale_returns(
+    return get_all_sale_returns(
         db=db,
         shop_id=shop_id,
     )
-
-    return returns
 
 
 # =====================================================
@@ -91,7 +101,7 @@ def sale_return_details(
 
         raise HTTPException(
             status_code=404,
-            detail="Sale Return not found",
+            detail="Sale Return not found.",
         )
 
     return sale_return

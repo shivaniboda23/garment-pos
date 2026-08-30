@@ -29,9 +29,12 @@ class PurchaseItem(Base):
         nullable=False,
     )
 
-    product_id = Column(
+    variant_id = Column(
         Integer,
-        ForeignKey("products.id"),
+        ForeignKey(
+            "product_variants.id",
+            ondelete="RESTRICT",
+        ),
         nullable=False,
     )
 
@@ -70,6 +73,9 @@ class PurchaseItem(Base):
         back_populates="items",
     )
 
-    product = relationship(
-        "Product",
+    variant = relationship(
+        "ProductVariant",
+        back_populates="purchase_items",
     )
+
+    

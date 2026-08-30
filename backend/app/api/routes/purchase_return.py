@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 
-from app.schemas.purchase_return import PurchaseReturnCreate
+from app.schemas.purchase_return import (
+    PurchaseReturnCreate,
+)
 
 from app.crud.purchase_return import (
     create_purchase_return,
@@ -12,6 +14,7 @@ from app.crud.purchase_return import (
     search_purchase_return,
     supplier_returns,
 )
+
 
 router = APIRouter(
     prefix="/purchase-return",
@@ -28,23 +31,31 @@ def create_purchase_return_api(
     data: PurchaseReturnCreate,
     db: Session = Depends(get_db),
 ):
-
     # TODO:
     # Replace with JWT authenticated shop_id later
     shop_id = 3
 
-    purchase_return = create_purchase_return(
-        db=db,
-        shop_id=shop_id,
-        data=data,
-    )
+    try:
 
-    return {
-        "success": True,
-        "message": "Purchase Return Created Successfully",
-        "return_id": purchase_return.id,
-        "return_number": purchase_return.return_number,
-    }
+        purchase_return = create_purchase_return(
+            db=db,
+            shop_id=shop_id,
+            data=data,
+        )
+
+        return {
+            "success": True,
+            "message": "Purchase Return Created Successfully",
+            "return_id": purchase_return.id,
+            "return_number": purchase_return.return_number,
+        }
+
+    except ValueError as e:
+
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        )
 
 
 # ==========================================================
@@ -55,7 +66,8 @@ def create_purchase_return_api(
 def purchase_return_history(
     db: Session = Depends(get_db),
 ):
-
+    # TODO:
+    # Replace with JWT authenticated shop_id later
     shop_id = 3
 
     returns = get_all_purchase_returns(
@@ -75,7 +87,8 @@ def purchase_return_details(
     return_id: int,
     db: Session = Depends(get_db),
 ):
-
+    # TODO:
+    # Replace with JWT authenticated shop_id later
     shop_id = 3
 
     purchase_return = get_purchase_return_by_id(
@@ -103,7 +116,8 @@ def search_return(
     return_number: str,
     db: Session = Depends(get_db),
 ):
-
+    # TODO:
+    # Replace with JWT authenticated shop_id later
     shop_id = 3
 
     return search_purchase_return(
@@ -122,7 +136,8 @@ def supplier_return_history(
     supplier_id: int,
     db: Session = Depends(get_db),
 ):
-
+    # TODO:
+    # Replace with JWT authenticated shop_id later
     shop_id = 3
 
     return supplier_returns(

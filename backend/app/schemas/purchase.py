@@ -10,7 +10,7 @@ from pydantic import BaseModel
 # ==========================
 
 class PurchaseItemCreate(BaseModel):
-    product_id: int
+    variant_id: int
     quantity: int
     stock_type: str
     cost_price: Decimal
@@ -44,7 +44,7 @@ class PurchaseCreate(BaseModel):
 
 class PurchaseItemResponse(BaseModel):
     id: int
-    product_id: int
+    variant_id: int
     quantity: int
     stock_type: str
     cost_price: Decimal

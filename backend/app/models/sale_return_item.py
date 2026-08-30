@@ -32,13 +32,25 @@ class SaleReturnItem(Base):
         Integer,
         ForeignKey(
             "product_variants.id",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
         ),
         nullable=False,
     )
 
     quantity = Column(
         Integer,
+        nullable=False,
+    )
+
+    k_quantity = Column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
+    r_quantity = Column(
+        Integer,
+        default=0,
         nullable=False,
     )
 
@@ -59,4 +71,5 @@ class SaleReturnItem(Base):
 
     variant = relationship(
         "ProductVariant",
+        back_populates="sale_return_items",
     )

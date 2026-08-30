@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.schemas.expense import (
     ExpenseCategoryCreate,
@@ -29,13 +30,15 @@ from app.crud.expense import (
     get_total_expense,
 )
 
+
 router = APIRouter(
     prefix="/expenses",
     tags=["Expenses"],
 )
 
+
 # ==========================================================
-# Expense Category
+# EXPENSE CATEGORIES
 # ==========================================================
 
 @router.post(
@@ -45,8 +48,13 @@ router = APIRouter(
 def add_expense_category(
     request: ExpenseCategoryCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    category = create_expense_category(db, request)
+    category = create_expense_category(
+        db=db,
+        shop_id=current_user.shop_id,
+        data=request,
+    )
 
     if category is None:
         raise HTTPException(
@@ -58,16 +66,16 @@ def add_expense_category(
 
 
 @router.get(
-    "/categories/{shop_id}",
+    "/categories",
     response_model=list[ExpenseCategoryResponse],
 )
 def list_expense_categories(
-    shop_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_expense_categories(
-        db,
-        shop_id,
+        db=db,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -78,10 +86,12 @@ def list_expense_categories(
 def expense_category_details(
     category_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     category = get_expense_category(
-        db,
-        category_id,
+        db=db,
+        shop_id=current_user.shop_id,
+        category_id=category_id,
     )
 
     if not category:
@@ -101,11 +111,13 @@ def edit_expense_category(
     category_id: int,
     request: ExpenseCategoryUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     category = update_expense_category(
-        db,
-        category_id,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        category_id=category_id,
+        data=request,
     )
 
     if category is None:
@@ -123,25 +135,102 @@ def edit_expense_category(
 def remove_expense_category(
     category_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    deleted = delete_expense_category(
-        db,
-        category_id,
+    result = delete_expense_category(
+        db=db,
+        shop_id=current_user.shop_id,
+        category_id=category_id,
     )
 
-    if not deleted:
+    if result is None:
         raise HTTPException(
             status_code=404,
             detail="Expense Category not found",
         )
 
+    if result == "HAS_EXPENSES":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This category has expense records and "
+                "cannot be deleted. Deactivate it instead."
+            ),
+        )
+
     return {
-        "message": "Expense Category deleted successfully"
+        "message": "Expense Category deactivated successfully"
     }
 
 
 # ==========================================================
-# Expenses
+# EXPENSE REPORT ENDPOINTS
+#
+# These MUST come before /{expense_id}
+# ==========================================================
+
+@router.get(
+    "/today",
+)
+def today_expenses(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return get_today_expenses(
+        db=db,
+        shop_id=current_user.shop_id,
+    )
+
+
+@router.get(
+    "/monthly",
+)
+def monthly_expenses(
+    month: int,
+    year: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return get_monthly_expenses(
+        db=db,
+        shop_id=current_user.shop_id,
+        month=month,
+        year=year,
+    )
+
+
+@router.get(
+    "/total",
+)
+def total_expense(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return {
+        "total_expense": get_total_expense(
+            db=db,
+            shop_id=current_user.shop_id,
+        )
+    }
+
+
+@router.get(
+    "/category/{category_id}",
+)
+def expenses_by_category(
+    category_id: int,
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return get_category_expenses(
+        db=db,
+        shop_id=current_user.shop_id,
+        category_id=category_id,
+    )
+
+
+# ==========================================================
+# EXPENSE CRUD
 # ==========================================================
 
 @router.post(
@@ -151,10 +240,12 @@ def remove_expense_category(
 def add_expense(
     request: ExpenseCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     expense = create_expense(
-        db,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        data=request,
     )
 
     if expense is None:
@@ -167,18 +258,24 @@ def add_expense(
 
 
 @router.get(
-    "/shop/{shop_id}",
+    "",
     response_model=list[ExpenseResponse],
 )
 def list_expenses(
-    shop_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_expenses(
-        db,
-        shop_id,
+        db=db,
+        shop_id=current_user.shop_id,
     )
 
+
+# ==========================================================
+# EXPENSE DETAILS
+#
+# Keep this LAST because /{expense_id} is dynamic.
+# ==========================================================
 
 @router.get(
     "/{expense_id}",
@@ -187,10 +284,12 @@ def list_expenses(
 def expense_details(
     expense_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     expense = get_expense(
-        db,
-        expense_id,
+        db=db,
+        shop_id=current_user.shop_id,
+        expense_id=expense_id,
     )
 
     if not expense:
@@ -210,11 +309,13 @@ def edit_expense(
     expense_id: int,
     request: ExpenseUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     expense = update_expense(
-        db,
-        expense_id,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        expense_id=expense_id,
+        data=request,
     )
 
     if expense is None:
@@ -232,10 +333,12 @@ def edit_expense(
 def remove_expense(
     expense_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     deleted = delete_expense(
-        db,
-        expense_id,
+        db=db,
+        shop_id=current_user.shop_id,
+        expense_id=expense_id,
     )
 
     if not deleted:
@@ -246,60 +349,4 @@ def remove_expense(
 
     return {
         "message": "Expense deleted successfully"
-    }
-
-
-# ==========================================================
-# Reports
-# ==========================================================
-
-@router.get("/today/{shop_id}")
-def today_expenses(
-    shop_id: int,
-    db: Session = Depends(get_db),
-):
-    return get_today_expenses(
-        db,
-        shop_id,
-    )
-
-
-@router.get("/monthly/{shop_id}")
-def monthly_expenses(
-    shop_id: int,
-    month: int,
-    year: int,
-    db: Session = Depends(get_db),
-):
-    return get_monthly_expenses(
-        db,
-        shop_id,
-        month,
-        year,
-    )
-
-
-@router.get("/category/{shop_id}/{category_id}")
-def expenses_by_category(
-    shop_id: int,
-    category_id: int,
-    db: Session = Depends(get_db),
-):
-    return get_category_expenses(
-        db,
-        shop_id,
-        category_id,
-    )
-
-
-@router.get("/total/{shop_id}")
-def total_expense(
-    shop_id: int,
-    db: Session = Depends(get_db),
-):
-    return {
-        "total_expense": get_total_expense(
-            db,
-            shop_id,
-        )
     }

@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+)
+
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -15,15 +20,16 @@ from app.schemas.stock import (
     StockResponse,
 )
 
+
 router = APIRouter(
     prefix="/stock",
     tags=["Stock"],
 )
 
 
-# ==========================================
-# Create Stock
-# ==========================================
+# ==========================================================
+# CREATE STOCK
+# ==========================================================
 
 @router.post(
     "",
@@ -33,14 +39,12 @@ def add_stock(
     request: StockCreate,
     db: Session = Depends(get_db),
 ):
-
     stock = create_stock(
         db,
         request,
     )
 
     if not stock:
-
         raise HTTPException(
             status_code=404,
             detail="Variant not found",
@@ -49,9 +53,9 @@ def add_stock(
     return stock
 
 
-# ==========================================
-# List Stock
-# ==========================================
+# ==========================================================
+# LIST STOCK
+# ==========================================================
 
 @router.get(
     "",
@@ -60,13 +64,12 @@ def add_stock(
 def list_stock(
     db: Session = Depends(get_db),
 ):
-
     return get_all_stock(db)
 
 
-# ==========================================
-# Update Stock
-# ==========================================
+# ==========================================================
+# UPDATE STOCK
+# ==========================================================
 
 @router.put(
     "/{variant_id}",
@@ -77,15 +80,26 @@ def edit_stock(
     request: StockUpdate,
     db: Session = Depends(get_db),
 ):
-
     stock = update_stock(
         db=db,
         variant_id=variant_id,
-        data=request,
+        k_stock=request.k_stock,
+        r_stock=request.r_stock,
+        k_minimum_stock=(
+            request.k_minimum_stock
+        ),
+        r_minimum_stock=(
+            request.r_minimum_stock
+        ),
+        minimum_stock=(
+            request.minimum_stock
+        ),
+        maximum_stock=(
+            request.maximum_stock
+        ),
     )
 
     if not stock:
-
         raise HTTPException(
             status_code=404,
             detail="Stock not found",

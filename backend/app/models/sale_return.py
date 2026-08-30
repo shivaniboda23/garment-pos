@@ -35,7 +35,7 @@ class SaleReturn(Base):
         Integer,
         ForeignKey(
             "sales.id",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
         ),
         nullable=False,
     )
@@ -44,9 +44,9 @@ class SaleReturn(Base):
         Integer,
         ForeignKey(
             "customers.id",
-            ondelete="CASCADE",
+            ondelete="RESTRICT",
         ),
-        nullable=False,
+        nullable=True,
     )
 
     return_number = Column(
@@ -60,7 +60,7 @@ class SaleReturn(Base):
     )
 
     refund_amount = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 

@@ -1,10 +1,11 @@
 from sqlalchemy import (
     Column,
     Integer,
-    String,
     Numeric,
-    ForeignKey,
+    String,
     DateTime,
+    ForeignKey,
+    Text,
     func,
 )
 
@@ -13,8 +14,8 @@ from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 
-class Expense(Base):
-    __tablename__ = "expenses"
+class TailorPayment(Base):
+    __tablename__ = "tailor_payments"
 
     id = Column(
         Integer,
@@ -29,15 +30,27 @@ class Expense(Base):
             ondelete="CASCADE",
         ),
         nullable=False,
+        index=True,
     )
 
-    category_id = Column(
+    supplier_id = Column(
         Integer,
         ForeignKey(
-            "expense_categories.id",
+            "suppliers.id",
             ondelete="RESTRICT",
         ),
         nullable=False,
+        index=True,
+    )
+
+    tailoring_job_id = Column(
+        Integer,
+        ForeignKey(
+            "tailoring_jobs.id",
+            ondelete="CASCADE",
+        ),
+        nullable=False,
+        index=True,
     )
 
     amount = Column(
@@ -47,7 +60,6 @@ class Expense(Base):
 
     payment_method = Column(
         String(30),
-        default="Cash",
         nullable=False,
     )
 
@@ -56,12 +68,12 @@ class Expense(Base):
         nullable=True,
     )
 
-    description = Column(
-        String(500),
+    notes = Column(
+        Text,
         nullable=True,
     )
 
-    expense_date = Column(
+    payment_date = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
@@ -73,19 +85,15 @@ class Expense(Base):
         nullable=False,
     )
 
-    updated_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+    tailoring_job = relationship(
+        "TailoringJob",
+        back_populates="tailor_payments",
+    )
+
+    supplier = relationship(
+        "Supplier",
     )
 
     shop = relationship(
         "Shop",
-        back_populates="expenses",
-    )
-
-    category = relationship(
-        "ExpenseCategory",
-        back_populates="expenses",
     )

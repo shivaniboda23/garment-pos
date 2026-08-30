@@ -1,41 +1,91 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
-# ==========================================
-# Create Stock
-# ==========================================
+# ==========================================================
+# CREATE STOCK
+# ==========================================================
 
 class StockCreate(BaseModel):
 
     variant_id: int
 
-    k_stock: int = 0
+    k_stock: int = Field(
+        default=0,
+        ge=0,
+    )
 
-    r_stock: int = 0
+    r_stock: int = Field(
+        default=0,
+        ge=0,
+    )
 
-    minimum_stock: int = 0
+    # Total minimum
+    minimum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
 
-    maximum_stock: int = 0
+    # K minimum
+    k_minimum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
+
+    # R minimum
+    r_minimum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
+
+    # Total maximum
+    maximum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
 
 
-# ==========================================
-# Update Stock
-# ==========================================
+# ==========================================================
+# UPDATE STOCK
+# ==========================================================
 
 class StockUpdate(BaseModel):
 
-    k_stock: int
+    k_stock: int = Field(
+        ge=0,
+    )
 
-    r_stock: int
+    r_stock: int = Field(
+        ge=0,
+    )
 
-    minimum_stock: int = 0
+    # Total minimum
+    minimum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
 
-    maximum_stock: int = 0
+    # K minimum
+    k_minimum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
+
+    # R minimum
+    r_minimum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
+
+    # Total maximum
+    maximum_stock: int = Field(
+        default=0,
+        ge=0,
+    )
 
 
-# ==========================================
-# Response
-# ==========================================
+# ==========================================================
+# RESPONSE
+# ==========================================================
 
 class StockResponse(BaseModel):
 
@@ -47,11 +97,15 @@ class StockResponse(BaseModel):
 
     r_stock: int
 
+    quantity: int
+
     minimum_stock: int
 
-    maximum_stock: int
+    k_minimum_stock: int
 
-    quantity: int
+    r_minimum_stock: int
+
+    maximum_stock: int
 
     class Config:
         from_attributes = True

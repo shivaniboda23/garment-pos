@@ -1,11 +1,11 @@
 from decimal import Decimal
 from typing import List
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # ==========================================================
-# Purchase Return Item Create
+# PURCHASE RETURN ITEM CREATE
 # ==========================================================
 
 class PurchaseReturnItemCreate(BaseModel):
@@ -22,30 +22,54 @@ class PurchaseReturnItemCreate(BaseModel):
 
     total: Decimal
 
+    # ------------------------------------------------------
+    # Quantity Validation
+    # ------------------------------------------------------
+
     @field_validator("quantity")
     @classmethod
     def validate_quantity(cls, value):
+
         if value <= 0:
-            raise ValueError("Quantity must be greater than 0")
+            raise ValueError(
+                "Quantity must be greater than 0."
+            )
+
         return value
+
+    # ------------------------------------------------------
+    # K Quantity Validation
+    # ------------------------------------------------------
 
     @field_validator("k_quantity")
     @classmethod
     def validate_k_quantity(cls, value):
+
         if value < 0:
-            raise ValueError("K Quantity cannot be negative")
+            raise ValueError(
+                "K Quantity cannot be negative."
+            )
+
         return value
+
+    # ------------------------------------------------------
+    # R Quantity Validation
+    # ------------------------------------------------------
 
     @field_validator("r_quantity")
     @classmethod
     def validate_r_quantity(cls, value):
+
         if value < 0:
-            raise ValueError("R Quantity cannot be negative")
+            raise ValueError(
+                "R Quantity cannot be negative."
+            )
+
         return value
 
 
 # ==========================================================
-# Purchase Return Create
+# PURCHASE RETURN CREATE
 # ==========================================================
 
 class PurchaseReturnCreate(BaseModel):
@@ -60,9 +84,24 @@ class PurchaseReturnCreate(BaseModel):
 
     items: List[PurchaseReturnItemCreate]
 
+    # ------------------------------------------------------
+    # Items Validation
+    # ------------------------------------------------------
+
+    @field_validator("items")
+    @classmethod
+    def validate_items(cls, value):
+
+        if not value:
+            raise ValueError(
+                "At least one purchase return item is required."
+            )
+
+        return value
+
 
 # ==========================================================
-# Purchase Return Item Response
+# PURCHASE RETURN ITEM RESPONSE
 # ==========================================================
 
 class PurchaseReturnItemResponse(BaseModel):
@@ -84,7 +123,7 @@ class PurchaseReturnItemResponse(BaseModel):
 
 
 # ==========================================================
-# Purchase Return Response
+# PURCHASE RETURN RESPONSE
 # ==========================================================
 
 class PurchaseReturnResponse(BaseModel):
@@ -103,7 +142,9 @@ class PurchaseReturnResponse(BaseModel):
 
     status: str
 
-    items: List[PurchaseReturnItemResponse] = []
+    items: List[PurchaseReturnItemResponse] = Field(
+        default_factory=list
+    )
 
     class Config:
         from_attributes = True

@@ -22,30 +22,54 @@ class SaleItemCreate(BaseModel):
 
     @field_validator("quantity")
     @classmethod
-    def validate_quantity(cls, value):
+    def validate_quantity(
+        cls,
+        value,
+    ):
         if value <= 0:
-            raise ValueError("Quantity must be greater than 0")
+            raise ValueError(
+                "Quantity must be greater than 0"
+            )
+
         return value
 
     @field_validator("k_quantity")
     @classmethod
-    def validate_k_quantity(cls, value):
+    def validate_k_quantity(
+        cls,
+        value,
+    ):
         if value < 0:
-            raise ValueError("K Quantity cannot be negative")
+            raise ValueError(
+                "K Quantity cannot be negative"
+            )
+
         return value
 
     @field_validator("r_quantity")
     @classmethod
-    def validate_r_quantity(cls, value):
+    def validate_r_quantity(
+        cls,
+        value,
+    ):
         if value < 0:
-            raise ValueError("R Quantity cannot be negative")
+            raise ValueError(
+                "R Quantity cannot be negative"
+            )
+
         return value
 
     @field_validator("discount")
     @classmethod
-    def validate_discount(cls, value):
+    def validate_discount(
+        cls,
+        value,
+    ):
         if value < 0:
-            raise ValueError("Discount cannot be negative")
+            raise ValueError(
+                "Discount cannot be negative"
+            )
+
         return value
 
 
@@ -67,9 +91,15 @@ class SaleCreate(BaseModel):
 
     @field_validator("discount")
     @classmethod
-    def validate_discount(cls, value):
+    def validate_discount(
+        cls,
+        value,
+    ):
         if value < 0:
-            raise ValueError("Discount cannot be negative")
+            raise ValueError(
+                "Discount cannot be negative"
+            )
+
         return value
 
 
@@ -85,9 +115,13 @@ class SaleItemResponse(BaseModel):
 
     quantity: int
 
+    stock_type: str
+
     k_quantity: int
 
     r_quantity: int
+
+    cost_price: Decimal
 
     unit_price: Decimal
 

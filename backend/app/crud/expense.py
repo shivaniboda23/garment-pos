@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import extract
+from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.models.expense import Expense
@@ -9,16 +9,19 @@ from app.models.shop import Shop
 
 
 # ==========================================================
-# Expense Category CRUD
+# EXPENSE CATEGORY CRUD
 # ==========================================================
 
 def create_expense_category(
     db: Session,
+    shop_id: int,
     data,
 ):
     shop = (
         db.query(Shop)
-        .filter(Shop.id == data.shop_id)
+        .filter(
+            Shop.id == shop_id,
+        )
         .first()
     )
 
@@ -26,7 +29,7 @@ def create_expense_category(
         return None
 
     category = ExpenseCategory(
-        shop_id=data.shop_id,
+        shop_id=shop_id,
         category_name=data.category_name,
         description=data.description,
     )
@@ -57,12 +60,14 @@ def get_expense_categories(
 
 def get_expense_category(
     db: Session,
+    shop_id: int,
     category_id: int,
 ):
     return (
         db.query(ExpenseCategory)
         .filter(
-            ExpenseCategory.id == category_id
+            ExpenseCategory.id == category_id,
+            ExpenseCategory.shop_id == shop_id,
         )
         .first()
     )
@@ -70,21 +75,29 @@ def get_expense_category(
 
 def update_expense_category(
     db: Session,
+    shop_id: int,
     category_id: int,
     data,
 ):
     category = get_expense_category(
-        db,
-        category_id,
+        db=db,
+        shop_id=shop_id,
+        category_id=category_id,
     )
 
     if not category:
         return None
 
-    for key, value in data.model_dump(
-        exclude_unset=True
-    ).items():
-        setattr(category, key, value)
+    update_data = data.model_dump(
+        exclude_unset=True,
+    )
+
+    for key, value in update_data.items():
+        setattr(
+            category,
+            key,
+            value,
+        )
 
     db.commit()
     db.refresh(category)
@@ -94,34 +107,50 @@ def update_expense_category(
 
 def delete_expense_category(
     db: Session,
+    shop_id: int,
     category_id: int,
 ):
     category = get_expense_category(
-        db,
-        category_id,
+        db=db,
+        shop_id=shop_id,
+        category_id=category_id,
     )
 
     if not category:
-        return False
+        return None
 
-    db.delete(category)
+    expense_count = (
+        db.query(Expense)
+        .filter(
+            Expense.shop_id == shop_id,
+            Expense.category_id == category_id,
+        )
+        .count()
+    )
+
+    if expense_count > 0:
+        return "HAS_EXPENSES"
+
+    category.is_active = False
+
     db.commit()
 
     return True
 
 
 # ==========================================================
-# Expense CRUD
+# EXPENSE CRUD
 # ==========================================================
 
 def create_expense(
     db: Session,
+    shop_id: int,
     data,
 ):
     shop = (
         db.query(Shop)
         .filter(
-            Shop.id == data.shop_id
+            Shop.id == shop_id,
         )
         .first()
     )
@@ -133,7 +162,7 @@ def create_expense(
         db.query(ExpenseCategory)
         .filter(
             ExpenseCategory.id == data.category_id,
-            ExpenseCategory.shop_id == data.shop_id,
+            ExpenseCategory.shop_id == shop_id,
             ExpenseCategory.is_active == True,
         )
         .first()
@@ -143,13 +172,16 @@ def create_expense(
         return None
 
     expense = Expense(
-        shop_id=data.shop_id,
+        shop_id=shop_id,
         category_id=data.category_id,
         amount=data.amount,
         payment_method=data.payment_method,
         reference_number=data.reference_number,
         description=data.description,
     )
+
+    if data.expense_date is not None:
+        expense.expense_date = data.expense_date
 
     db.add(expense)
     db.commit()
@@ -165,7 +197,7 @@ def get_expenses(
     return (
         db.query(Expense)
         .filter(
-            Expense.shop_id == shop_id
+            Expense.shop_id == shop_id,
         )
         .order_by(
             Expense.expense_date.desc()
@@ -176,12 +208,14 @@ def get_expenses(
 
 def get_expense(
     db: Session,
+    shop_id: int,
     expense_id: int,
 ):
     return (
         db.query(Expense)
         .filter(
-            Expense.id == expense_id
+            Expense.id == expense_id,
+            Expense.shop_id == shop_id,
         )
         .first()
     )
@@ -189,12 +223,14 @@ def get_expense(
 
 def update_expense(
     db: Session,
+    shop_id: int,
     expense_id: int,
     data,
 ):
     expense = get_expense(
-        db,
-        expense_id,
+        db=db,
+        shop_id=shop_id,
+        expense_id=expense_id,
     )
 
     if not expense:
@@ -206,7 +242,7 @@ def update_expense(
             db.query(ExpenseCategory)
             .filter(
                 ExpenseCategory.id == data.category_id,
-                ExpenseCategory.shop_id == expense.shop_id,
+                ExpenseCategory.shop_id == shop_id,
                 ExpenseCategory.is_active == True,
             )
             .first()
@@ -215,10 +251,16 @@ def update_expense(
         if not category:
             return None
 
-    for key, value in data.model_dump(
-        exclude_unset=True
-    ).items():
-        setattr(expense, key, value)
+    update_data = data.model_dump(
+        exclude_unset=True,
+    )
+
+    for key, value in update_data.items():
+        setattr(
+            expense,
+            key,
+            value,
+        )
 
     db.commit()
     db.refresh(expense)
@@ -228,11 +270,13 @@ def update_expense(
 
 def delete_expense(
     db: Session,
+    shop_id: int,
     expense_id: int,
 ):
     expense = get_expense(
-        db,
-        expense_id,
+        db=db,
+        shop_id=shop_id,
+        expense_id=expense_id,
     )
 
     if not expense:
@@ -245,7 +289,7 @@ def delete_expense(
 
 
 # ==========================================================
-# Reports
+# REPORTS
 # ==========================================================
 
 def get_today_expenses(
@@ -258,9 +302,18 @@ def get_today_expenses(
         db.query(Expense)
         .filter(
             Expense.shop_id == shop_id,
-            extract("year", Expense.expense_date) == today.year,
-            extract("month", Expense.expense_date) == today.month,
-            extract("day", Expense.expense_date) == today.day,
+            extract(
+                "year",
+                Expense.expense_date,
+            ) == today.year,
+            extract(
+                "month",
+                Expense.expense_date,
+            ) == today.month,
+            extract(
+                "day",
+                Expense.expense_date,
+            ) == today.day,
         )
         .order_by(
             Expense.expense_date.desc()
@@ -279,8 +332,14 @@ def get_monthly_expenses(
         db.query(Expense)
         .filter(
             Expense.shop_id == shop_id,
-            extract("month", Expense.expense_date) == month,
-            extract("year", Expense.expense_date) == year,
+            extract(
+                "month",
+                Expense.expense_date,
+            ) == month,
+            extract(
+                "year",
+                Expense.expense_date,
+            ) == year,
         )
         .order_by(
             Expense.expense_date.desc()
@@ -311,12 +370,12 @@ def get_total_expense(
     db: Session,
     shop_id: int,
 ):
-    from sqlalchemy import func
-
     return (
         db.query(
             func.coalesce(
-                func.sum(Expense.amount),
+                func.sum(
+                    Expense.amount
+                ),
                 0,
             )
         )

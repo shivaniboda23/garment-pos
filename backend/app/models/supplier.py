@@ -18,11 +18,18 @@ from app.db.database import Base
 class Supplier(Base):
     __tablename__ = "suppliers"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
     shop_id = Column(
         Integer,
-        ForeignKey("shops.id", ondelete="CASCADE"),
+        ForeignKey(
+            "shops.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
     )
 
@@ -35,6 +42,22 @@ class Supplier(Base):
     supplier_name = Column(
         String(150),
         nullable=False,
+    )
+
+    # ======================================================
+    # SUPPLIER TYPE
+    #
+    # SUPPLIER = normal goods supplier
+    # TAILOR   = stitching/tailoring provider
+    # BOTH     = can supply goods and do tailoring
+    # ======================================================
+
+    supplier_type = Column(
+        String(20),
+        nullable=False,
+        default="SUPPLIER",
+        server_default="SUPPLIER",
+        index=True,
     )
 
     contact_person = Column(
@@ -57,7 +80,9 @@ class Supplier(Base):
         String(20),
     )
 
-    address = Column(Text)
+    address = Column(
+        Text
+    )
 
     city = Column(
         String(80),
@@ -102,7 +127,9 @@ class Supplier(Base):
         String(20),
     )
 
-    notes = Column(Text)
+    notes = Column(
+        Text
+    )
 
     is_active = Column(
         Boolean,
@@ -110,18 +137,28 @@ class Supplier(Base):
     )
 
     created_at = Column(
-        DateTime(timezone=True),
+        DateTime(
+            timezone=True
+        ),
         server_default=func.now(),
     )
+
+    # ======================================================
+    # RELATIONSHIPS
+    # ======================================================
 
     shop = relationship(
         "Shop",
         back_populates="suppliers",
     )
 
-   
     purchases = relationship(
-         "Purchase",
-         back_populates="supplier",
-         cascade="all, delete-orphan",
-     )
+        "Purchase",
+        back_populates="supplier",
+    )
+
+    payments = relationship(
+        "SupplierPayment",
+        back_populates="supplier",
+        passive_deletes=True,
+    )

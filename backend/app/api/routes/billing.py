@@ -1,4 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+)
+
 from sqlalchemy.orm import Session
 
 from app.crud.billing import (
@@ -7,9 +12,18 @@ from app.crud.billing import (
     get_bill_by_id,
     search_bill,
 )
+
 from app.db.database import get_db
-from app.dependencies import get_current_user
-from app.schemas.billing import BillCreate, BillResponse
+
+from app.dependencies import (
+    get_current_user,
+)
+
+from app.schemas.billing import (
+    BillCreate,
+    BillResponse,
+)
+
 
 router = APIRouter(
     prefix="/billing",
@@ -31,6 +45,7 @@ def create_bill_api(
     current_user=Depends(get_current_user),
 ):
     try:
+
         bill = create_bill(
             db=db,
             shop_id=current_user.shop_id,
@@ -40,7 +55,9 @@ def create_bill_api(
         if bill is None:
             raise HTTPException(
                 status_code=404,
-                detail="Shop or customer not found",
+                detail=(
+                    "Shop or customer not found."
+                ),
             )
 
         return bill
@@ -56,8 +73,10 @@ def create_bill_api(
 
     except Exception as exc:
         raise HTTPException(
-            status_code=400,
-            detail=str(exc),
+            status_code=500,
+            detail=(
+                f"Billing failed: {str(exc)}"
+            ),
         )
 
 
@@ -121,7 +140,7 @@ def bill_details(
     if not bill:
         raise HTTPException(
             status_code=404,
-            detail="Bill not found",
+            detail="Bill not found.",
         )
 
     return bill

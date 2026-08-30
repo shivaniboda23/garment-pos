@@ -24,13 +24,18 @@ class Sale(Base):
 
     shop_id = Column(
         Integer,
-        ForeignKey("shops.id", ondelete="CASCADE"),
+        ForeignKey(
+            "shops.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
     )
 
     customer_id = Column(
         Integer,
-        ForeignKey("customers.id"),
+        ForeignKey(
+            "customers.id",
+        ),
         nullable=True,
     )
 
@@ -95,4 +100,10 @@ class Sale(Base):
         "SaleItem",
         back_populates="sale",
         cascade="all, delete-orphan",
+    )
+
+    bill = relationship(
+        "Bill",
+        back_populates="sale",
+        uselist=False,
     )

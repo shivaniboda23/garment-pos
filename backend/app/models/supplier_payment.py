@@ -1,10 +1,11 @@
 from sqlalchemy import (
     Column,
     Integer,
-    String,
     Numeric,
-    ForeignKey,
+    String,
     DateTime,
+    ForeignKey,
+    Text,
     func,
 )
 
@@ -13,8 +14,8 @@ from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 
-class Expense(Base):
-    __tablename__ = "expenses"
+class SupplierPayment(Base):
+    __tablename__ = "supplier_payments"
 
     id = Column(
         Integer,
@@ -31,10 +32,19 @@ class Expense(Base):
         nullable=False,
     )
 
-    category_id = Column(
+    supplier_id = Column(
         Integer,
         ForeignKey(
-            "expense_categories.id",
+            "suppliers.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+
+    purchase_id = Column(
+        Integer,
+        ForeignKey(
+            "purchases.id",
             ondelete="RESTRICT",
         ),
         nullable=False,
@@ -47,7 +57,6 @@ class Expense(Base):
 
     payment_method = Column(
         String(30),
-        default="Cash",
         nullable=False,
     )
 
@@ -56,12 +65,12 @@ class Expense(Base):
         nullable=True,
     )
 
-    description = Column(
-        String(500),
+    notes = Column(
+        Text,
         nullable=True,
     )
 
-    expense_date = Column(
+    payment_date = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
@@ -73,19 +82,17 @@ class Expense(Base):
         nullable=False,
     )
 
-    updated_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
     shop = relationship(
         "Shop",
-        back_populates="expenses",
+        back_populates="supplier_payments",
     )
 
-    category = relationship(
-        "ExpenseCategory",
-        back_populates="expenses",
+    supplier = relationship(
+        "Supplier",
+        back_populates="payments",
+    )
+
+    purchase = relationship(
+        "Purchase",
+        back_populates="payments",
     )

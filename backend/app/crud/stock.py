@@ -5,14 +5,18 @@ from app.models.product_variant import ProductVariant
 
 
 # ==========================================================
-# Create Stock
+# CREATE STOCK
 # ==========================================================
 
-def create_stock(db: Session, data):
-
+def create_stock(
+    db: Session,
+    data,
+):
     variant = (
         db.query(ProductVariant)
-        .filter(ProductVariant.id == data.variant_id)
+        .filter(
+            ProductVariant.id == data.variant_id
+        )
         .first()
     )
 
@@ -21,29 +25,41 @@ def create_stock(db: Session, data):
 
     stock = (
         db.query(Stock)
-        .filter(Stock.variant_id == data.variant_id)
+        .filter(
+            Stock.variant_id == data.variant_id
+        )
         .first()
     )
 
     if stock:
-
         stock.k_stock += data.k_stock
         stock.r_stock += data.r_stock
 
-        if hasattr(data, "minimum_stock"):
-            stock.minimum_stock = data.minimum_stock
+        stock.minimum_stock = (
+            data.minimum_stock
+        )
 
-        if hasattr(data, "maximum_stock"):
-            stock.maximum_stock = data.maximum_stock
+        stock.k_minimum_stock = (
+            data.k_minimum_stock
+        )
+
+        stock.r_minimum_stock = (
+            data.r_minimum_stock
+        )
+
+        stock.maximum_stock = (
+            data.maximum_stock
+        )
 
     else:
-
         stock = Stock(
             variant_id=data.variant_id,
             k_stock=data.k_stock,
             r_stock=data.r_stock,
-            minimum_stock=getattr(data, "minimum_stock", 0),
-            maximum_stock=getattr(data, "maximum_stock", 0),
+            minimum_stock=data.minimum_stock,
+            k_minimum_stock=data.k_minimum_stock,
+            r_minimum_stock=data.r_minimum_stock,
+            maximum_stock=data.maximum_stock,
         )
 
         db.add(stock)
@@ -55,11 +71,12 @@ def create_stock(db: Session, data):
 
 
 # ==========================================================
-# Get All Stock
+# GET ALL STOCK
 # ==========================================================
 
-def get_all_stock(db: Session):
-
+def get_all_stock(
+    db: Session,
+):
     return (
         db.query(Stock)
         .all()
@@ -67,23 +84,24 @@ def get_all_stock(db: Session):
 
 
 # ==========================================================
-# Get Single Stock
+# GET STOCK BY VARIANT
 # ==========================================================
 
 def get_stock_by_variant(
     db: Session,
     variant_id: int,
 ):
-
     return (
         db.query(Stock)
-        .filter(Stock.variant_id == variant_id)
+        .filter(
+            Stock.variant_id == variant_id
+        )
         .first()
     )
 
 
 # ==========================================================
-# Update Stock
+# UPDATE STOCK
 # ==========================================================
 
 def update_stock(
@@ -91,13 +109,16 @@ def update_stock(
     variant_id: int,
     k_stock: int,
     r_stock: int,
-    minimum_stock: int = 0,
-    maximum_stock: int = 0,
+    minimum_stock: int,
+    k_minimum_stock: int,
+    r_minimum_stock: int,
+    maximum_stock: int,
 ):
-
     stock = (
         db.query(Stock)
-        .filter(Stock.variant_id == variant_id)
+        .filter(
+            Stock.variant_id == variant_id
+        )
         .first()
     )
 
@@ -106,8 +127,22 @@ def update_stock(
 
     stock.k_stock = k_stock
     stock.r_stock = r_stock
-    stock.minimum_stock = minimum_stock
-    stock.maximum_stock = maximum_stock
+
+    stock.k_minimum_stock = (
+        k_minimum_stock
+    )
+
+    stock.r_minimum_stock = (
+        r_minimum_stock
+    )
+
+    stock.minimum_stock = (
+        minimum_stock
+    )
+
+    stock.maximum_stock = (
+        maximum_stock
+    )
 
     db.commit()
     db.refresh(stock)
@@ -116,7 +151,7 @@ def update_stock(
 
 
 # ==========================================================
-# Increase K Stock
+# INCREASE K STOCK
 # ==========================================================
 
 def add_k_stock(
@@ -124,7 +159,6 @@ def add_k_stock(
     variant_id: int,
     quantity: int,
 ):
-
     stock = get_stock_by_variant(
         db,
         variant_id,
@@ -142,7 +176,7 @@ def add_k_stock(
 
 
 # ==========================================================
-# Increase R Stock
+# INCREASE R STOCK
 # ==========================================================
 
 def add_r_stock(
@@ -150,7 +184,6 @@ def add_r_stock(
     variant_id: int,
     quantity: int,
 ):
-
     stock = get_stock_by_variant(
         db,
         variant_id,
@@ -168,14 +201,13 @@ def add_r_stock(
 
 
 # ==========================================================
-# Total Stock
+# TOTAL STOCK
 # ==========================================================
 
 def get_total_stock(
     db: Session,
     variant_id: int,
 ):
-
     stock = get_stock_by_variant(
         db,
         variant_id,
@@ -184,4 +216,7 @@ def get_total_stock(
     if not stock:
         return 0
 
-    return stock.k_stock + stock.r_stock
+    return (
+        stock.k_stock
+        + stock.r_stock
+    )

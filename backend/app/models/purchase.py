@@ -7,24 +7,36 @@ from sqlalchemy import (
     DateTime,
     func,
 )
+
 from sqlalchemy.orm import relationship
+
 from app.db.database import Base
 
 
 class Purchase(Base):
     __tablename__ = "purchases"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
     shop_id = Column(
         Integer,
-        ForeignKey("shops.id", ondelete="CASCADE"),
+        ForeignKey(
+            "shops.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
     )
 
     supplier_id = Column(
         Integer,
-        ForeignKey("suppliers.id", ondelete="CASCADE"),
+        ForeignKey(
+            "suppliers.id",
+            ondelete="RESTRICT",
+        ),
         nullable=False,
     )
 
@@ -38,32 +50,32 @@ class Purchase(Base):
     )
 
     subtotal = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 
     discount = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 
     gst = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 
     grand_total = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 
     paid_amount = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 
     balance_amount = Column(
-        Numeric(12,2),
+        Numeric(12, 2),
         default=0,
     )
 
@@ -97,4 +109,10 @@ class Purchase(Base):
         "PurchaseItem",
         back_populates="purchase",
         cascade="all, delete-orphan",
+    )
+
+    payments = relationship(
+        "SupplierPayment",
+        back_populates="purchase",
+        passive_deletes=True,
     )

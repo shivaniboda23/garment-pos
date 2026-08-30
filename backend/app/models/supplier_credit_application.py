@@ -1,20 +1,19 @@
 from sqlalchemy import (
     Column,
     Integer,
-    String,
     Numeric,
+    String,
+    Text,
     ForeignKey,
     DateTime,
     func,
 )
 
-from sqlalchemy.orm import relationship
-
 from app.db.database import Base
 
 
-class Expense(Base):
-    __tablename__ = "expenses"
+class SupplierCreditApplication(Base):
+    __tablename__ = "supplier_credit_applications"
 
     id = Column(
         Integer,
@@ -31,10 +30,19 @@ class Expense(Base):
         nullable=False,
     )
 
-    category_id = Column(
+    supplier_id = Column(
         Integer,
         ForeignKey(
-            "expense_categories.id",
+            "suppliers.id",
+            ondelete="RESTRICT",
+        ),
+        nullable=False,
+    )
+
+    purchase_id = Column(
+        Integer,
+        ForeignKey(
+            "purchases.id",
             ondelete="RESTRICT",
         ),
         nullable=False,
@@ -45,23 +53,17 @@ class Expense(Base):
         nullable=False,
     )
 
-    payment_method = Column(
-        String(30),
-        default="Cash",
-        nullable=False,
-    )
-
     reference_number = Column(
         String(100),
         nullable=True,
     )
 
-    description = Column(
-        String(500),
+    notes = Column(
+        Text,
         nullable=True,
     )
 
-    expense_date = Column(
+    applied_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
@@ -71,21 +73,4 @@ class Expense(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
-    )
-
-    updated_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
-    shop = relationship(
-        "Shop",
-        back_populates="expenses",
-    )
-
-    category = relationship(
-        "ExpenseCategory",
-        back_populates="expenses",
     )

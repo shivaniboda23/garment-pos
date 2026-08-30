@@ -18,3 +18,7 @@ from .purchase_return import PurchaseReturn
 from .purchase_return_item import PurchaseReturnItem
 from .expense_category import ExpenseCategory
 from .expense import Expense
+from app.models.supplier_payment import SupplierPayment
+from app.models.stock_movement import StockMovement
+from app.models.tailoring_job import TailoringJob
+from app.models.tailor_payment import TailorPayment

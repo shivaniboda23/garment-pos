@@ -1,191 +1,736 @@
-import random
+from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy.orm import Session
+from fastapi import HTTPException
+from sqlalchemy import String
+from sqlalchemy.orm import (
+    Session,
+    joinedload,
+)
 
 from app.models.customer import Customer
-from app.models.product_variant import ProductVariant
+from app.models.product_variant import (
+    ProductVariant,
+)
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.shop import Shop
-from sqlalchemy import String
-from sqlalchemy.orm import joinedload
+
+from app.services.stock_movement import (
+    record_stock_movement,
+)
 
 
-from datetime import datetime
+# ==========================================================
+# Generate Invoice
+# ==========================================================
 
 def generate_invoice():
-    return f"INV-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-
-def create_sale(db: Session, data):
-
-    # -----------------------------
-    # Validate Shop
-    # -----------------------------
-    shop = (
-        db.query(Shop)
-        .filter(Shop.id == data.shop_id)
-        .first()
+    return (
+        f"INV-"
+        f"{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
     )
 
-    if not shop:
-        return None
 
-    # -----------------------------
-    # Validate Customer
-    # -----------------------------
-    if data.customer_id:
+# ==========================================================
+# Create Sale
+# ==========================================================
 
-        customer = (
-            db.query(Customer)
-            .filter(Customer.id == data.customer_id)
+def create_sale(
+    db: Session,
+    data,
+):
+    try:
+
+        # --------------------------------------------------
+        # Validate Shop
+        # --------------------------------------------------
+
+        shop = (
+            db.query(Shop)
+            .filter(
+                Shop.id
+                == data.shop_id,
+            )
             .first()
         )
 
-        if not customer:
-            return None
+        if not shop:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Shop {data.shop_id} "
+                    f"not found."
+                ),
+            )
 
-    subtotal = Decimal("0")
-    gst_total = Decimal("0")
+        # --------------------------------------------------
+        # Validate Customer
+        # --------------------------------------------------
 
-    sale_items = []
+        if (
+            data.customer_id
+            is not None
+        ):
 
-    # -----------------------------
-    # Validate Items
-    # -----------------------------
-    for item in data.items:
+            customer = (
+                db.query(Customer)
+                .filter(
+                    Customer.id
+                    == data.customer_id,
 
-        variant = (
-            db.query(ProductVariant)
-            .filter(ProductVariant.id == item.variant_id)
+                    Customer.shop_id
+                    == data.shop_id,
+                )
+                .first()
+            )
+
+            if not customer:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"Customer "
+                        f"{data.customer_id} "
+                        f"not found."
+                    ),
+                )
+
+        # --------------------------------------------------
+        # Validate Items
+        # --------------------------------------------------
+
+        if not data.items:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "At least one sale "
+                    "item is required."
+                ),
+            )
+
+        subtotal = (
+            Decimal("0.00")
+        )
+
+        gst_total = (
+            Decimal("0.00")
+        )
+
+        sale_items = []
+
+        # --------------------------------------------------
+        # Process Items
+        # --------------------------------------------------
+
+        for item in data.items:
+
+            if item.quantity <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Quantity for "
+                        f"variant "
+                        f"{item.variant_id} "
+                        f"must be greater "
+                        f"than zero."
+                    ),
+                )
+
+            if item.k_quantity < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "K quantity cannot "
+                        "be negative."
+                    ),
+                )
+
+            if item.r_quantity < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "R quantity cannot "
+                        "be negative."
+                    ),
+                )
+
+            if item.quantity != (
+                item.k_quantity
+                + item.r_quantity
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Total quantity must "
+                        "equal K Quantity "
+                        "+ R Quantity for "
+                        f"variant "
+                        f"{item.variant_id}."
+                    ),
+                )
+
+            if item.discount < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Discount cannot "
+                        "be negative."
+                    ),
+                )
+
+            # ------------------------------------------------
+            # Lock Variant
+            # ------------------------------------------------
+
+            variant = (
+                db.query(
+                    ProductVariant
+                )
+                .options(
+                    joinedload(
+                        ProductVariant.product
+                    ),
+                    joinedload(
+                        ProductVariant.stock
+                    ),
+                )
+                .filter(
+                    ProductVariant.id
+                    == item.variant_id,
+                )
+                .with_for_update()
+                .first()
+            )
+
+            if not variant:
+                raise HTTPException(
+                    status_code=404,
+                    detail=(
+                        f"Variant "
+                        f"{item.variant_id} "
+                        f"not found."
+                    ),
+                )
+
+            product = (
+                variant.product
+            )
+
+            stock = (
+                variant.stock
+            )
+
+            if not product:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        f"Product for "
+                        f"variant "
+                        f"{variant.id} "
+                        f"not found."
+                    ),
+                )
+
+            if (
+                product.shop_id
+                != data.shop_id
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        f"Variant "
+                        f"{variant.id} "
+                        f"does not belong "
+                        f"to shop "
+                        f"{data.shop_id}."
+                    ),
+                )
+
+            if not stock:
+                raise HTTPException(
+                    status_code=500,
+                    detail=(
+                        "Stock record not "
+                        f"found for variant "
+                        f"{variant.id}."
+                    ),
+                )
+
+            # ------------------------------------------------
+            # Validate Stock
+            # ------------------------------------------------
+
+            if (
+                item.k_quantity
+                > stock.k_stock
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Not enough K "
+                        f"Stock for SKU "
+                        f"{variant.sku}. "
+                        f"Available: "
+                        f"{stock.k_stock}, "
+                        f"requested: "
+                        f"{item.k_quantity}."
+                    ),
+                )
+
+            if (
+                item.r_quantity
+                > stock.r_stock
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Not enough R "
+                        f"Stock for SKU "
+                        f"{variant.sku}. "
+                        f"Available: "
+                        f"{stock.r_stock}, "
+                        f"requested: "
+                        f"{item.r_quantity}."
+                    ),
+                )
+
+            # ------------------------------------------------
+            # Determine Stock Source
+            # ------------------------------------------------
+
+            if (
+                item.k_quantity > 0
+                and item.r_quantity > 0
+            ):
+
+                stock_type = (
+                    "MIXED"
+                )
+
+            elif item.k_quantity > 0:
+
+                stock_type = "K"
+
+            else:
+
+                stock_type = "R"
+
+            # ------------------------------------------------
+            # Pricing
+            # ------------------------------------------------
+
+            unit_price = Decimal(
+                str(
+                    variant.selling_price
+                    or 0
+                )
+            )
+
+            cost_price = Decimal(
+                str(
+                    variant.cost_price
+                    or 0
+                )
+            )
+
+            if cost_price <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Cost price is not "
+                        f"configured for SKU "
+                        f"{variant.sku}. "
+                        "Please set a valid "
+                        "cost price before "
+                        "selling this item."
+                    ),
+                )
+
+            line_total = (
+                unit_price
+                * Decimal(
+                    item.quantity
+                )
+            )
+
+            line_total -= (
+                Decimal(
+                    str(
+                        item.discount
+                    )
+                )
+            )
+
+            if line_total < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Discount cannot "
+                        f"exceed line value "
+                        f"for SKU "
+                        f"{variant.sku}."
+                    ),
+                )
+
+            gst_percentage = (
+                Decimal(
+                    str(
+                        product
+                        .gst_percentage
+                        or 0
+                    )
+                )
+            )
+
+            gst = (
+                line_total
+                * gst_percentage
+                / Decimal("100")
+            )
+
+            subtotal += (
+                line_total
+            )
+
+            gst_total += (
+                gst
+            )
+
+            sale_items.append(
+                {
+                    "variant":
+                        variant,
+
+                    "stock":
+                        stock,
+
+                    "quantity":
+                        item.quantity,
+
+                    "k_quantity":
+                        item.k_quantity,
+
+                    "r_quantity":
+                        item.r_quantity,
+
+                    "stock_type":
+                        stock_type,
+
+                    "cost_price":
+                        cost_price,
+
+                    "unit_price":
+                        unit_price,
+
+                    "discount":
+                        Decimal(
+                            str(
+                                item.discount
+                            )
+                        ),
+
+                    "gst":
+                        gst,
+
+                    "total":
+                        line_total + gst,
+                }
+            )
+
+        # --------------------------------------------------
+        # Sale Discount
+        # --------------------------------------------------
+
+        sale_discount = Decimal(
+            str(
+                data.discount or 0
+            )
+        )
+
+        if sale_discount < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Sale discount "
+                    "cannot be negative."
+                ),
+            )
+
+        if sale_discount > (
+            subtotal + gst_total
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Sale discount cannot "
+                    "exceed sale total."
+                ),
+            )
+
+        grand_total = (
+            subtotal
+            + gst_total
+            - sale_discount
+        )
+
+        # --------------------------------------------------
+        # Generate Invoice
+        # --------------------------------------------------
+
+        invoice = (
+            generate_invoice()
+        )
+
+        while (
+            db.query(Sale)
+            .filter(
+                Sale.invoice_number
+                == invoice,
+            )
             .first()
+        ):
+            invoice = (
+                generate_invoice()
+            )
+
+        # --------------------------------------------------
+        # Create Sale
+        # --------------------------------------------------
+
+        sale = Sale(
+            shop_id=data.shop_id,
+            customer_id=
+                data.customer_id,
+
+            invoice_number=
+                invoice,
+
+            subtotal=
+                subtotal,
+
+            discount=
+                sale_discount,
+
+            gst_amount=
+                gst_total,
+
+            total_amount=
+                grand_total,
+
+            payment_method=
+                data.payment_method,
+
+            status=
+                "Completed",
         )
 
-        if not variant:
-            raise Exception(
-                f"Variant {item.variant_id} not found."
-            )
-
-        if not variant.stock:
-            raise Exception(
-                f"No stock found for Variant {variant.id}"
-            )
-
-        # Quantity validation
-        if item.quantity != (item.k_quantity + item.r_quantity):
-            raise Exception(
-                f"Total quantity must equal K Quantity + R Quantity for SKU {variant.sku}"
-            )
-
-        # Validate K Stock
-        if item.k_quantity > variant.stock.k_stock:
-            raise Exception(
-                f"Not enough K Stock for SKU {variant.sku}"
-            )
-
-        # Validate R Stock
-        if item.r_quantity > variant.stock.r_stock:
-            raise Exception(
-                f"Not enough R Stock for SKU {variant.sku}"
-            )
-
-        unit_price = Decimal(variant.selling_price)
-
-        line_total = unit_price * Decimal(item.quantity)
-
-        line_total -= Decimal(item.discount)
-
-        gst = (
-            line_total
-            * Decimal(variant.product.gst_percentage)
-            / Decimal("100")
+        db.add(
+            sale
         )
 
-        subtotal += line_total
-        gst_total += gst
+        db.flush()
 
-        sale_items.append(
-            {
-                "variant": variant,
-                "quantity": item.quantity,
-                "k_quantity": item.k_quantity,
-                "r_quantity": item.r_quantity,
-                "unit_price": unit_price,
-                "discount": Decimal(item.discount),
-                "gst": gst,
-                "total": line_total + gst,
-            }
+        # --------------------------------------------------
+        # Save Items + Deduct Stock
+        # --------------------------------------------------
+
+        for row in sale_items:
+
+            variant = (
+                row["variant"]
+            )
+
+            stock = (
+                row["stock"]
+            )
+
+            # ==============================================
+            # K STOCK MOVEMENT
+            # ==============================================
+
+            if row["k_quantity"] > 0:
+
+                k_before = int(
+                    stock.k_stock
+                    or 0
+                )
+
+                stock.k_stock -= (
+                    row["k_quantity"]
+                )
+
+                k_after = int(
+                    stock.k_stock
+                    or 0
+                )
+
+                record_stock_movement(
+                    db=db,
+                    shop_id=
+                        data.shop_id,
+
+                    variant_id=
+                        variant.id,
+
+                    movement_type=
+                        "SALE",
+
+                    stock_type=
+                        "K",
+
+                    quantity=(
+                        -row[
+                            "k_quantity"
+                        ]
+                    ),
+
+                    quantity_before=
+                        k_before,
+
+                    quantity_after=
+                        k_after,
+
+                    reference_type=
+                        "SALE",
+
+                    reference_id=
+                        sale.id,
+
+                    reference_number=
+                        sale.invoice_number,
+                )
+
+            # ==============================================
+            # R STOCK MOVEMENT
+            # ==============================================
+
+            if row["r_quantity"] > 0:
+
+                r_before = int(
+                    stock.r_stock
+                    or 0
+                )
+
+                stock.r_stock -= (
+                    row["r_quantity"]
+                )
+
+                r_after = int(
+                    stock.r_stock
+                    or 0
+                )
+
+                record_stock_movement(
+                    db=db,
+                    shop_id=
+                        data.shop_id,
+
+                    variant_id=
+                        variant.id,
+
+                    movement_type=
+                        "SALE",
+
+                    stock_type=
+                        "R",
+
+                    quantity=(
+                        -row[
+                            "r_quantity"
+                        ]
+                    ),
+
+                    quantity_before=
+                        r_before,
+
+                    quantity_after=
+                        r_after,
+
+                    reference_type=
+                        "SALE",
+
+                    reference_id=
+                        sale.id,
+
+                    reference_number=
+                        sale.invoice_number,
+                )
+
+            # ------------------------------------------------
+            # Save Sale Item
+            # ------------------------------------------------
+
+            sale_item = SaleItem(
+                sale_id=
+                    sale.id,
+
+                variant_id=
+                    variant.id,
+
+                quantity=
+                    row["quantity"],
+
+                stock_type=
+                    row["stock_type"],
+
+                k_quantity=
+                    row["k_quantity"],
+
+                r_quantity=
+                    row["r_quantity"],
+
+                cost_price=
+                    row["cost_price"],
+
+                unit_price=
+                    row["unit_price"],
+
+                discount=
+                    row["discount"],
+
+                gst=
+                    row["gst"],
+
+                total_price=
+                    row["total"],
+            )
+
+            db.add(
+                sale_item
+            )
+
+        # --------------------------------------------------
+        # Commit
+        # --------------------------------------------------
+
+        db.commit()
+
+        db.refresh(
+            sale
         )
 
-    grand_total = subtotal + gst_total - Decimal(data.discount)
+        return sale
 
-    invoice = generate_invoice()
+    except HTTPException:
+        db.rollback()
+        raise
 
-    while (
-        db.query(Sale)
-        .filter(Sale.invoice_number == invoice)
-        .first()
-    ):
-        invoice = generate_invoice()
+    except Exception as exc:
 
-    sale = Sale(
-        shop_id=data.shop_id,
-        customer_id=data.customer_id,
-        invoice_number=invoice,
-        subtotal=subtotal,
-        discount=Decimal(data.discount),
-        gst_amount=gst_total,
-        total_amount=grand_total,
-        payment_method=data.payment_method,
-        status="Completed",
-    )
+        db.rollback()
 
-    db.add(sale)
-
-    db.flush()
-
-    # -----------------------------
-    # Save Items & Reduce Stock
-    # -----------------------------
-    for row in sale_items:
-
-        variant = row["variant"]
-
-        stock = variant.stock
-
-        if stock.k_stock < row["k_quantity"]:
-            raise Exception("Insufficient K Stock")
-
-        if stock.r_stock < row["r_quantity"]:
-            raise Exception("Insufficient R Stock")
-
-        sale_item = SaleItem(
-            sale_id=sale.id,
-            variant_id=variant.id,
-            quantity=row["quantity"],
-            k_quantity=row["k_quantity"],
-            r_quantity=row["r_quantity"],
-            unit_price=row["unit_price"],
-            discount=row["discount"],
-            gst=row["gst"],
-            total_price=row["total"],
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Sale creation "
+                f"failed: {str(exc)}"
+            ),
         )
 
-        db.add(sale_item)
 
-    db.commit()
-
-    db.refresh(sale)
-
-    return sale
 # ==========================================================
-# SALES HISTORY
+# Sales History
 # ==========================================================
-
-
-from app.models.sale import Sale
-
 
 def get_all_sales(
     db: Session,
@@ -198,16 +743,24 @@ def get_all_sales(
     query = (
         db.query(Sale)
         .options(
-            joinedload(Sale.customer),
-            joinedload(Sale.items)
+            joinedload(
+                Sale.customer
+            ),
+
+            joinedload(
+                Sale.items
+            )
+            .joinedload(
+                SaleItem.variant
+            ),
         )
         .filter(
-            Sale.shop_id == shop_id
+            Sale.shop_id
+            == shop_id,
         )
     )
 
     if invoice:
-
         query = query.filter(
             Sale.invoice_number.ilike(
                 f"%{invoice}%"
@@ -215,31 +768,31 @@ def get_all_sales(
         )
 
     if customer_id:
-
         query = query.filter(
-            Sale.customer_id == customer_id
+            Sale.customer_id
+            == customer_id
         )
 
     if date:
-
         query = query.filter(
-            Sale.created_at.cast(String).like(
+            Sale.created_at
+            .cast(String)
+            .like(
                 f"{date}%"
             )
         )
 
-    sales = (
-        query.order_by(
+    return (
+        query
+        .order_by(
             Sale.created_at.desc()
         )
         .all()
     )
 
-    return sales
-
 
 # ==========================================================
-# SALE DETAILS
+# Sale Details
 # ==========================================================
 
 def get_sale_by_id(
@@ -248,18 +801,26 @@ def get_sale_by_id(
     shop_id: int,
 ):
 
-    sale = (
+    return (
         db.query(Sale)
         .options(
-            joinedload(Sale.customer),
-            joinedload(Sale.items)
-            .joinedload(SaleItem.variant)
+            joinedload(
+                Sale.customer
+            ),
+
+            joinedload(
+                Sale.items
+            )
+            .joinedload(
+                SaleItem.variant
+            ),
         )
         .filter(
-            Sale.id == sale_id,
-            Sale.shop_id == shop_id,
+            Sale.id
+            == sale_id,
+
+            Sale.shop_id
+            == shop_id,
         )
         .first()
     )
-
-    return sale

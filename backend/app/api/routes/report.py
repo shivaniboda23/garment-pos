@@ -1,12 +1,15 @@
 from fastapi import APIRouter, Depends
+
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.crud.report import (
     get_profit_loss,
     get_daily_report,
     get_monthly_report,
+    get_product_analytics,
 )
 
 from app.schemas.report import (
@@ -15,6 +18,7 @@ from app.schemas.report import (
     MonthlyReportResponse,
 )
 
+
 router = APIRouter(
     prefix="/reports",
     tags=["Reports"],
@@ -22,7 +26,7 @@ router = APIRouter(
 
 
 # ==========================================================
-# Profit & Loss
+# PROFIT & LOSS
 # ==========================================================
 
 @router.get(
@@ -30,17 +34,17 @@ router = APIRouter(
     response_model=ProfitLossResponse,
 )
 def profit_loss(
-    shop_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_profit_loss(
-        db,
-        shop_id,
+        db=db,
+        shop_id=current_user.shop_id,
     )
 
 
 # ==========================================================
-# Daily Report
+# DAILY REPORT
 # ==========================================================
 
 @router.get(
@@ -48,17 +52,17 @@ def profit_loss(
     response_model=DailyReportResponse,
 )
 def daily_report(
-    shop_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_daily_report(
-        db,
-        shop_id,
+        db=db,
+        shop_id=current_user.shop_id,
     )
 
 
 # ==========================================================
-# Monthly Report
+# MONTHLY REPORT
 # ==========================================================
 
 @router.get(
@@ -66,10 +70,27 @@ def daily_report(
     response_model=list[MonthlyReportResponse],
 )
 def monthly_report(
-    shop_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_monthly_report(
-        db,
-        shop_id,
+        db=db,
+        shop_id=current_user.shop_id,
+    )
+
+
+# ==========================================================
+# PRODUCT ANALYTICS
+# ==========================================================
+
+@router.get(
+    "/products",
+)
+def product_analytics(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    return get_product_analytics(
+        db=db,
+        shop_id=current_user.shop_id,
     )

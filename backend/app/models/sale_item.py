@@ -2,6 +2,7 @@ from sqlalchemy import (
     Column,
     Integer,
     Numeric,
+    String,
     ForeignKey,
 )
 
@@ -36,55 +37,70 @@ class SaleItem(Base):
         nullable=False,
     )
 
-    # -----------------------------------
-    # Total Quantity Sold
-    # -----------------------------------
     quantity = Column(
         Integer,
         nullable=False,
     )
 
-    # -----------------------------------
-    # Manufacturing (K) Quantity Sold
-    # -----------------------------------
+    # ------------------------------------------------------
+    # Stock Source
+    # ------------------------------------------------------
+
+    stock_type = Column(
+        String(20),
+        nullable=False,
+        default="MIXED",
+    )
+
     k_quantity = Column(
         Integer,
         default=0,
         nullable=False,
     )
 
-    # -----------------------------------
-    # Ready Purchase (R) Quantity Sold
-    # -----------------------------------
     r_quantity = Column(
         Integer,
         default=0,
         nullable=False,
     )
 
+    # ------------------------------------------------------
+    # Cost snapshot at time of sale
+    # ------------------------------------------------------
+
+    cost_price = Column(
+        Numeric(12, 2),
+        nullable=False,
+    )
+
+    # ------------------------------------------------------
+    # Selling price
+    # ------------------------------------------------------
+
     unit_price = Column(
-        Numeric(10, 2),
+        Numeric(12, 2),
         nullable=False,
     )
 
     discount = Column(
-        Numeric(10, 2),
+        Numeric(12, 2),
         default=0,
     )
 
     gst = Column(
-        Numeric(10, 2),
+        Numeric(12, 2),
         default=0,
     )
 
     total_price = Column(
-        Numeric(10, 2),
+        Numeric(12, 2),
         nullable=False,
     )
 
-    # -----------------------------------
+    # ------------------------------------------------------
     # Relationships
-    # -----------------------------------
+    # ------------------------------------------------------
+
     sale = relationship(
         "Sale",
         back_populates="items",

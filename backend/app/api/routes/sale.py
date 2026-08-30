@@ -19,15 +19,16 @@ from app.schemas.sale import (
     SaleResponse,
 )
 
+
 router = APIRouter(
     prefix="/sales",
     tags=["Sales"],
 )
 
 
-# =====================================================
+# ==========================================================
 # CREATE SALE
-# =====================================================
+# ==========================================================
 
 @router.post(
     "",
@@ -37,25 +38,25 @@ def add_sale(
     request: SaleCreate,
     db: Session = Depends(get_db),
 ):
-
     sale = create_sale(
         db,
         request,
     )
 
     if sale is None:
-
         raise HTTPException(
             status_code=404,
-            detail="Shop or Customer not found",
+            detail=(
+                "Shop or Customer not found."
+            ),
         )
 
     return sale
 
 
-# =====================================================
+# ==========================================================
 # SALES HISTORY
-# =====================================================
+# ==========================================================
 
 @router.get("/")
 def sales_history(
@@ -64,7 +65,7 @@ def sales_history(
     date: str | None = None,
     db: Session = Depends(get_db),
 ):
-
+    # Current shop used by the mobile app.
     shop_id = 3
 
     sales = get_all_sales(
@@ -78,16 +79,16 @@ def sales_history(
     return sales
 
 
-# =====================================================
+# ==========================================================
 # SALE DETAILS
-# =====================================================
+# ==========================================================
 
 @router.get("/{sale_id}")
 def sale_details(
     sale_id: int,
     db: Session = Depends(get_db),
 ):
-
+    # Current shop used by the mobile app.
     shop_id = 3
 
     sale = get_sale_by_id(
@@ -97,10 +98,9 @@ def sale_details(
     )
 
     if not sale:
-
         raise HTTPException(
             status_code=404,
-            detail="Sale not found",
+            detail="Sale not found.",
         )
 
     return sale

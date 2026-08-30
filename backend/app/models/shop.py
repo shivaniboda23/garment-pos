@@ -1,8 +1,8 @@
 from sqlalchemy import Column, Integer, String
+
 from sqlalchemy.orm import relationship
 
 from app.db.database import Base
-
 
 
 class Shop(Base):
@@ -65,6 +65,12 @@ class Shop(Base):
 
     purchase_returns = relationship(
         "PurchaseReturn",
+        back_populates="shop",
+        cascade="all, delete-orphan",
+    )
+
+    supplier_payments = relationship(
+        "SupplierPayment",
         back_populates="shop",
         cascade="all, delete-orphan",
     )
