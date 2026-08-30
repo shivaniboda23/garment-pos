@@ -19,3 +19,8 @@ backend-express/
 backend/Microsoft/
 backend/app.zip
 mobile_app (2).zip
+
+# Local ERP backup / temporary files
+backend/Microsoft/
+backend/app.zip
+mobile_app (2).zip
