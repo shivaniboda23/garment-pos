@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.purchase import Purchase
 from app.models.purchase_item import PurchaseItem
 from app.models.product_variant import ProductVariant
+from app.models.stock import Stock
 from app.models.supplier_payment import SupplierPayment
 
 from app.services.stock_movement import (
@@ -200,20 +201,13 @@ def create_purchase(
 
             variant = (
                 db.query(ProductVariant)
-                .options(
-                    joinedload(
-                        ProductVariant.product
-                    ),
-
-                    joinedload(
-                        ProductVariant.stock
-                    ),
-                )
                 .filter(
                     ProductVariant.id
                     == item.variant_id,
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=ProductVariant
+                )
                 .first()
             )
 
@@ -249,7 +243,19 @@ def create_purchase(
                     ),
                 )
 
-            if not variant.stock:
+            stock = (
+                db.query(Stock)
+                .filter(
+                    Stock.variant_id
+                    == variant.id,
+                )
+                .with_for_update(
+                    of=Stock
+                )
+                .first()
+            )
+
+            if not stock:
                 raise HTTPException(
                     status_code=500,
                     detail=(
@@ -305,32 +311,32 @@ def create_purchase(
             if stock_type == "K":
 
                 stock_before = int(
-                    variant.stock.k_stock
+                    stock.k_stock
                     or 0
                 )
 
-                variant.stock.k_stock += (
+                stock.k_stock += (
                     item.quantity
                 )
 
                 stock_after = int(
-                    variant.stock.k_stock
+                    stock.k_stock
                     or 0
                 )
 
             else:
 
                 stock_before = int(
-                    variant.stock.r_stock
+                    stock.r_stock
                     or 0
                 )
 
-                variant.stock.r_stock += (
+                stock.r_stock += (
                     item.quantity
                 )
 
                 stock_after = int(
-                    variant.stock.r_stock
+                    stock.r_stock
                     or 0
                 )
 
