@@ -7,8 +7,10 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.crud.stock import (
+    adjust_physical_stock,
     create_stock,
     get_all_stock,
     update_stock,
@@ -16,6 +18,8 @@ from app.crud.stock import (
 
 from app.schemas.stock import (
     StockCreate,
+    PhysicalStockAdjustmentCreate,
+    PhysicalStockAdjustmentResponse,
     StockUpdate,
     StockResponse,
 )
@@ -25,6 +29,30 @@ router = APIRouter(
     prefix="/stock",
     tags=["Stock"],
 )
+
+
+# ==========================================================
+# PHYSICAL STOCK ADJUSTMENT
+# ==========================================================
+
+@router.post(
+    "/adjust",
+    response_model=(
+        PhysicalStockAdjustmentResponse
+    ),
+)
+def reconcile_physical_stock(
+    request: PhysicalStockAdjustmentCreate,
+    db: Session = Depends(get_db),
+    current_user=Depends(
+        get_current_user
+    ),
+):
+    return adjust_physical_stock(
+        db=db,
+        shop_id=current_user.shop_id,
+        data=request,
+    )
 
 
 # ==========================================================
