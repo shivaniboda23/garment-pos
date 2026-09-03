@@ -66,10 +66,12 @@ def reconcile_physical_stock(
 def add_stock(
     request: StockCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     stock = create_stock(
-        db,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        data=request,
     )
 
     if not stock:
@@ -91,8 +93,12 @@ def add_stock(
 )
 def list_stock(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    return get_all_stock(db)
+    return get_all_stock(
+        db=db,
+        shop_id=current_user.shop_id,
+    )
 
 
 # ==========================================================
@@ -107,9 +113,11 @@ def edit_stock(
     variant_id: int,
     request: StockUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     stock = update_stock(
         db=db,
+        shop_id=current_user.shop_id,
         variant_id=variant_id,
         k_stock=request.k_stock,
         r_stock=request.r_stock,

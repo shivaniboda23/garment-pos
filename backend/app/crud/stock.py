@@ -15,12 +15,18 @@ from app.services.stock_movement import (
 
 def create_stock(
     db: Session,
+    shop_id: int,
     data,
 ):
     variant = (
         db.query(ProductVariant)
+        .join(
+            Product,
+            Product.id == ProductVariant.product_id,
+        )
         .filter(
-            ProductVariant.id == data.variant_id
+            ProductVariant.id == data.variant_id,
+            Product.shop_id == shop_id,
         )
         .first()
     )
@@ -81,9 +87,21 @@ def create_stock(
 
 def get_all_stock(
     db: Session,
+    shop_id: int,
 ):
     return (
         db.query(Stock)
+        .join(
+            ProductVariant,
+            ProductVariant.id == Stock.variant_id,
+        )
+        .join(
+            Product,
+            Product.id == ProductVariant.product_id,
+        )
+        .filter(
+            Product.shop_id == shop_id,
+        )
         .all()
     )
 
@@ -111,6 +129,7 @@ def get_stock_by_variant(
 
 def update_stock(
     db: Session,
+    shop_id: int,
     variant_id: int,
     k_stock: int,
     r_stock: int,
@@ -121,8 +140,17 @@ def update_stock(
 ):
     stock = (
         db.query(Stock)
+        .join(
+            ProductVariant,
+            ProductVariant.id == Stock.variant_id,
+        )
+        .join(
+            Product,
+            Product.id == ProductVariant.product_id,
+        )
         .filter(
-            Stock.variant_id == variant_id
+            Stock.variant_id == variant_id,
+            Product.shop_id == shop_id,
         )
         .first()
     )
