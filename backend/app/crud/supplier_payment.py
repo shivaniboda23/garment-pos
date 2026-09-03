@@ -721,7 +721,16 @@ def get_all_supplier_dues(
     results = []
 
     for purchase in purchases:
-        supplier = purchase.supplier
+        supplier = (
+            db.query(Supplier)
+            .filter(
+                Supplier.id
+                == purchase.supplier_id,
+                Supplier.shop_id
+                == shop_id,
+            )
+            .first()
+        )
 
         if not supplier:
             continue

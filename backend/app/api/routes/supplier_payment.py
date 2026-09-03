@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.core.config import TEMP_SHOP_ID
+from app.dependencies import get_current_user
 
 from app.schemas.supplier_payment import (
     SupplierPaymentCreate,
@@ -45,12 +45,11 @@ router = APIRouter(
 def create_supplier_payment_api(
     data: SupplierPaymentCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return create_supplier_payment(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         data=data,
     )
 
@@ -64,12 +63,11 @@ def create_supplier_payment_api(
 )
 def supplier_due_list(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_all_supplier_dues(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -83,12 +81,11 @@ def supplier_due_list(
 )
 def supplier_payment_history(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_all_supplier_payments(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -103,12 +100,11 @@ def supplier_payment_history(
 def purchase_payment_history(
     purchase_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_purchase_payments(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         purchase_id=purchase_id,
     )
 
@@ -124,12 +120,11 @@ def purchase_payment_history(
 def supplier_payment_history(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_supplier_payments(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         supplier_id=supplier_id,
     )
 
@@ -145,12 +140,11 @@ def supplier_payment_history(
 def supplier_balance_summary(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_supplier_balance_summary(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         supplier_id=supplier_id,
     )
 
@@ -166,12 +160,11 @@ def supplier_balance_summary(
 def supplier_ledger(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_supplier_ledger(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         supplier_id=supplier_id,
     )
 
@@ -187,12 +180,11 @@ def supplier_ledger(
 def apply_credit_to_purchase(
     data: SupplierCreditApplicationCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return apply_supplier_credit(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         data=data,
     )
 
@@ -208,12 +200,11 @@ def apply_credit_to_purchase(
 def purchase_credit_history(
     purchase_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_purchase_credit_applications(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         purchase_id=purchase_id,
     )
 
@@ -228,10 +219,9 @@ def purchase_credit_history(
 )
 def all_credit_applications(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    shop_id = TEMP_SHOP_ID
-
     return get_all_credit_applications(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
