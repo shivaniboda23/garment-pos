@@ -7,7 +7,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.core.config import TEMP_SHOP_ID
+from app.dependencies import get_current_user
 
 from app.schemas.sale_return import (
     SaleReturnCreate,
@@ -38,15 +38,14 @@ router = APIRouter(
 def create_sale_return_api(
     request: SaleReturnCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
 
     try:
 
         sale_return = create_sale_return(
             db=db,
-            shop_id=shop_id,
+            shop_id=current_user.shop_id,
             data=request,
         )
 
@@ -55,10 +54,13 @@ def create_sale_return_api(
     except HTTPException:
         raise
 
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
-            status_code=400,
-            detail=str(exc),
+            status_code=500,
+            detail=(
+                "Sale return creation "
+                "could not be completed."
+            ),
         )
 
 
@@ -69,13 +71,12 @@ def create_sale_return_api(
 @router.get("/")
 def sale_return_history(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
 
     return get_all_sale_returns(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -87,13 +88,12 @@ def sale_return_history(
 def sale_return_details(
     return_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
 
     sale_return = get_sale_return_by_id(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         return_id=return_id,
     )
 

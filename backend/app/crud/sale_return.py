@@ -17,6 +17,8 @@ from app.models.sale_return_item import (
 from app.models.product_variant import (
     ProductVariant,
 )
+from app.models.product import Product
+from app.models.stock import Stock
 
 from app.services.stock_movement import (
     record_stock_movement,
@@ -162,7 +164,9 @@ def create_sale_return(
                     SaleItem.variant_id
                     == item.variant_id,
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=SaleItem
+                )
                 .first()
             )
 
@@ -185,54 +189,43 @@ def create_sale_return(
                 db.query(
                     ProductVariant
                 )
-                .options(
-                    joinedload(
-                        ProductVariant.stock
-                    ),
-                    joinedload(
-                        ProductVariant.product
-                    ),
+                .join(
+                    Product,
+                    Product.id
+                    == ProductVariant.product_id,
                 )
                 .filter(
                     ProductVariant.id
                     == item.variant_id,
+
+                    Product.shop_id
+                    == shop_id,
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=ProductVariant
+                )
                 .first()
             )
 
             if not variant:
                 raise HTTPException(
                     status_code=404,
-                    detail=(
-                        f"Variant "
-                        f"{item.variant_id} "
-                        f"not found."
-                    ),
+                    detail="Variant not found.",
                 )
 
-            if not variant.product:
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        "Product not found "
-                        "for variant."
-                    ),
+            stock = (
+                db.query(Stock)
+                .filter(
+                    Stock.variant_id
+                    == variant.id,
                 )
-
-            if (
-                variant.product.shop_id
-                != shop_id
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Variant does not "
-                        "belong to this shop."
-                    ),
+                .with_for_update(
+                    of=Stock
                 )
+                .first()
+            )
 
-            if not variant.stock:
+            if not stock:
                 raise HTTPException(
                     status_code=500,
                     detail=(
@@ -240,8 +233,6 @@ def create_sale_return(
                         "found for variant."
                     ),
                 )
-
-            stock = variant.stock
 
             # ----------------------------------------------
             # Validate Return Quantities
@@ -309,6 +300,9 @@ def create_sale_return(
                     == SaleReturn.id,
                 )
                 .filter(
+                    SaleReturn.shop_id
+                    == shop_id,
+
                     SaleReturn.sale_id
                     == sale.id,
 
@@ -342,6 +336,9 @@ def create_sale_return(
                     == SaleReturn.id,
                 )
                 .filter(
+                    SaleReturn.shop_id
+                    == shop_id,
+
                     SaleReturn.sale_id
                     == sale.id,
 
@@ -572,7 +569,7 @@ def create_sale_return(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
@@ -580,7 +577,7 @@ def create_sale_return(
             status_code=500,
             detail=(
                 "Sale return creation "
-                f"failed: {str(exc)}"
+                "could not be completed."
             ),
         )
 
