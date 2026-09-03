@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, joinedload
 from app.models.purchase import Purchase
 from app.models.purchase_item import PurchaseItem
 from app.models.product_variant import ProductVariant
+from app.models.product import Product
 from app.models.stock import Stock
 from app.models.supplier_payment import SupplierPayment
 
@@ -201,9 +202,17 @@ def create_purchase(
 
             variant = (
                 db.query(ProductVariant)
+                .join(
+                    Product,
+                    Product.id
+                    == ProductVariant.product_id,
+                )
                 .filter(
                     ProductVariant.id
                     == item.variant_id,
+
+                    Product.shop_id
+                    == shop_id,
                 )
                 .with_for_update(
                     of=ProductVariant
@@ -214,33 +223,7 @@ def create_purchase(
             if not variant:
                 raise HTTPException(
                     status_code=404,
-                    detail=(
-                        f"Variant "
-                        f"{item.variant_id} "
-                        f"not found."
-                    ),
-                )
-
-            if not variant.product:
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        f"Product for variant "
-                        f"{variant.id} "
-                        f"not found."
-                    ),
-                )
-
-            if (
-                variant.product.shop_id
-                != shop_id
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Variant does not "
-                        "belong to this shop."
-                    ),
+                    detail="Variant not found.",
                 )
 
             stock = (
@@ -434,17 +417,17 @@ def create_purchase(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
             status_code=500,
             detail=(
-                "Purchase creation failed: "
-                f"{str(exc)}"
+                "Purchase creation could not "
+                "be completed."
             ),
-        )
+        ) from None
 
 
 # ==========================================================
