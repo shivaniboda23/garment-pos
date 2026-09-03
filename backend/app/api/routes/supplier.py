@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 
 from app.schemas.supplier import (
@@ -26,10 +27,6 @@ router = APIRouter(
     tags=["Suppliers"],
 )
 
-# Temporary
-from app.core.config import TEMP_SHOP_ID
-
-
 @router.post(
     "/",
     response_model=SupplierResponse,
@@ -37,11 +34,12 @@ from app.core.config import TEMP_SHOP_ID
 def create_supplier_api(
     supplier: SupplierCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return create_supplier(
-        db,
-        TEMP_SHOP_ID,
-        supplier,
+        db=db,
+        shop_id=current_user.shop_id,
+        supplier=supplier,
     )
 
 
@@ -51,10 +49,11 @@ def create_supplier_api(
 )
 def list_suppliers(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_suppliers(
-        db,
-        TEMP_SHOP_ID,
+        db=db,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -65,11 +64,12 @@ def list_suppliers(
 def search_supplier_api(
     keyword: str,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return search_supplier(
-        db,
-        TEMP_SHOP_ID,
-        keyword,
+        db=db,
+        shop_id=current_user.shop_id,
+        keyword=keyword,
     )
 
 
@@ -80,12 +80,13 @@ def search_supplier_api(
 def get_supplier_api(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
 
     supplier = get_supplier(
-        db,
-        supplier_id,
-        TEMP_SHOP_ID,
+        db=db,
+        supplier_id=supplier_id,
+        shop_id=current_user.shop_id,
     )
 
     if supplier is None:
@@ -105,13 +106,14 @@ def update_supplier_api(
     supplier_id: int,
     supplier: SupplierUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
 
     updated = update_supplier(
-        db,
-        supplier_id,
-        TEMP_SHOP_ID,
-        supplier,
+        db=db,
+        supplier_id=supplier_id,
+        shop_id=current_user.shop_id,
+        supplier=supplier,
     )
 
     if updated is None:
@@ -127,12 +129,13 @@ def update_supplier_api(
 def delete_supplier_api(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
 
     supplier = delete_supplier(
-        db,
-        supplier_id,
-        TEMP_SHOP_ID,
+        db=db,
+        supplier_id=supplier_id,
+        shop_id=current_user.shop_id,
     )
 
     if supplier is None:
