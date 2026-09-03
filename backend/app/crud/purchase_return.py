@@ -17,6 +17,8 @@ from app.models.purchase_return_item import (
 from app.models.product_variant import (
     ProductVariant,
 )
+from app.models.product import Product
+from app.models.stock import Stock
 
 from app.services.stock_movement import (
     record_stock_movement,
@@ -65,8 +67,7 @@ def create_purchase_return(
 
     if not purchase:
         raise ValueError(
-            f"Purchase {data.purchase_id} "
-            f"not found for this shop."
+            "Purchase not found."
         )
 
     # -------------------------------------------------------
@@ -151,53 +152,47 @@ def create_purchase_return(
                 db.query(
                     ProductVariant
                 )
-                .options(
-                    joinedload(
-                        ProductVariant.stock
-                    ),
-                    joinedload(
-                        ProductVariant.product
-                    ),
+                .join(
+                    Product,
+                    Product.id
+                    == ProductVariant.product_id,
                 )
                 .filter(
                     ProductVariant.id
                     == item.variant_id,
+
+                    Product.shop_id
+                    == shop_id,
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=ProductVariant
+                )
                 .first()
             )
 
             if not variant:
                 raise ValueError(
-                    f"Variant "
-                    f"{item.variant_id} "
-                    f"not found."
+                    "Variant not found."
                 )
 
-            if not variant.product:
-                raise ValueError(
-                    f"Product for Variant "
-                    f"{variant.id} "
-                    f"not found."
+            stock = (
+                db.query(Stock)
+                .filter(
+                    Stock.variant_id
+                    == variant.id,
                 )
-
-            if (
-                variant.product.shop_id
-                != shop_id
-            ):
-                raise ValueError(
-                    "Variant does not "
-                    "belong to this shop."
+                .with_for_update(
+                    of=Stock
                 )
+                .first()
+            )
 
-            if not variant.stock:
+            if not stock:
                 raise ValueError(
                     f"No stock record "
                     f"found for Variant "
                     f"{variant.id}."
                 )
-
-            stock = variant.stock
 
             # ------------------------------------------------
             # Validate Quantity
@@ -315,6 +310,9 @@ def create_purchase_return(
                     == PurchaseReturn.id,
                 )
                 .filter(
+                    PurchaseReturn.shop_id
+                    == shop_id,
+
                     PurchaseReturn.purchase_id
                     == purchase.id,
 
@@ -349,6 +347,9 @@ def create_purchase_return(
                     == PurchaseReturn.id,
                 )
                 .filter(
+                    PurchaseReturn.shop_id
+                    == shop_id,
+
                     PurchaseReturn.purchase_id
                     == purchase.id,
 
