@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
-from app.core.config import TEMP_SHOP_ID
+from app.dependencies import get_current_user
 
 from app.schemas.purchase import PurchaseCreate
 
@@ -33,16 +33,11 @@ router = APIRouter(
 def create_purchase_api(
     data: PurchaseCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    # TODO:
-    # Later this will come from JWT Login
-
-    shop_id = TEMP_SHOP_ID
-
     purchase = create_purchase(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         data=data,
     )
 
@@ -65,13 +60,11 @@ def purchase_history(
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
-
     purchases = get_all_purchases(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         invoice=invoice,
         supplier_id=supplier_id,
         status=status,
@@ -90,14 +83,12 @@ def purchase_history(
 def purchase_details(
     purchase_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
-
     purchase = get_purchase_by_id(
         db=db,
         purchase_id=purchase_id,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
     if purchase is None:
@@ -117,13 +108,11 @@ def purchase_details(
 def search_invoice(
     invoice: str,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
-
     purchases = search_purchase_invoice(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         invoice=invoice,
     )
 
@@ -138,13 +127,11 @@ def search_invoice(
 def supplier_purchase_history(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
-
     purchases = search_purchase_supplier(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         supplier_id=supplier_id,
     )
 
@@ -158,13 +145,11 @@ def supplier_purchase_history(
 @router.get("/status/pending")
 def pending_purchases(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
-
     return get_pending_purchases(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -175,11 +160,9 @@ def pending_purchases(
 @router.get("/status/completed")
 def completed_purchases(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = TEMP_SHOP_ID
-
     return get_completed_purchases(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
