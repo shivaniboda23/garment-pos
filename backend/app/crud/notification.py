@@ -9,6 +9,7 @@ from app.models.bill import Bill
 from app.models.payment import Payment
 from app.models.purchase import Purchase
 from app.models.customer import Customer
+from app.models.supplier import Supplier
 
 
 def get_notifications(
@@ -339,7 +340,9 @@ def get_notifications(
             db.query(Customer)
             .filter(
                 Customer.id
-                == bill.customer_id
+                == bill.customer_id,
+                Customer.shop_id
+                == shop_id,
             )
             .first()
         )
@@ -405,14 +408,22 @@ def get_notifications(
             "Supplier"
         )
 
-        try:
-            if purchase.supplier:
-                supplier_name = (
-                    purchase.supplier.supplier_name
-                    or "Supplier"
-                )
-        except Exception:
-            supplier_name = "Supplier"
+        supplier = (
+            db.query(Supplier)
+            .filter(
+                Supplier.id
+                == purchase.supplier_id,
+                Supplier.shop_id
+                == shop_id,
+            )
+            .first()
+        )
+
+        if supplier:
+            supplier_name = (
+                supplier.supplier_name
+                or "Supplier"
+            )
 
         balance_amount = float(
             purchase.balance_amount
