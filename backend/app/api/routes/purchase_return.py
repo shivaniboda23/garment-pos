@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.schemas.purchase_return import (
     PurchaseReturnCreate,
@@ -30,16 +31,13 @@ router = APIRouter(
 def create_purchase_return_api(
     data: PurchaseReturnCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # TODO:
-    # Replace with JWT authenticated shop_id later
-    shop_id = 3
-
     try:
 
         purchase_return = create_purchase_return(
             db=db,
-            shop_id=shop_id,
+            shop_id=current_user.shop_id,
             data=data,
         )
 
@@ -65,14 +63,11 @@ def create_purchase_return_api(
 @router.get("/")
 def purchase_return_history(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # TODO:
-    # Replace with JWT authenticated shop_id later
-    shop_id = 3
-
     returns = get_all_purchase_returns(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
     return returns
@@ -86,14 +81,11 @@ def purchase_return_history(
 def purchase_return_details(
     return_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # TODO:
-    # Replace with JWT authenticated shop_id later
-    shop_id = 3
-
     purchase_return = get_purchase_return_by_id(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         return_id=return_id,
     )
 
@@ -115,14 +107,11 @@ def purchase_return_details(
 def search_return(
     return_number: str,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # TODO:
-    # Replace with JWT authenticated shop_id later
-    shop_id = 3
-
     return search_purchase_return(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         return_number=return_number,
     )
 
@@ -135,13 +124,10 @@ def search_return(
 def supplier_return_history(
     supplier_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # TODO:
-    # Replace with JWT authenticated shop_id later
-    shop_id = 3
-
     return supplier_returns(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         supplier_id=supplier_id,
     )
