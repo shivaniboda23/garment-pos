@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.crud.dashboard import (
     get_dashboard_summary,
@@ -25,13 +26,12 @@ router = APIRouter(
 @router.get("/summary")
 def dashboard_summary(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = 3
 
     return get_dashboard_summary(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -42,13 +42,12 @@ def dashboard_summary(
 @router.get("/low-stock")
 def low_stock_products(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = 3
 
     return get_low_stock_products(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -59,13 +58,12 @@ def low_stock_products(
 @router.get("/top-selling")
 def top_selling_products(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = 3
 
     return get_top_selling_products(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -76,13 +74,12 @@ def top_selling_products(
 @router.get("/recent-sales")
 def recent_sales(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = 3
 
     return get_recent_sales(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -93,13 +90,12 @@ def recent_sales(
 @router.get("/recent-purchases")
 def recent_purchases(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = 3
 
     return get_recent_purchases(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -110,11 +106,10 @@ def recent_purchases(
 @router.get("/monthly-sales")
 def monthly_sales(
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-
-    shop_id = 3
 
     return get_monthly_sales(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
