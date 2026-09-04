@@ -266,7 +266,7 @@ def create_stock_adjustment(
             Product.shop_id
             == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=ProductVariant)
         .first()
     )
 
@@ -287,7 +287,7 @@ def create_stock_adjustment(
             Stock.variant_id
             == variant.id
         )
-        .with_for_update()
+        .with_for_update(of=Stock)
         .first()
     )
 
@@ -416,16 +416,13 @@ def create_stock_adjustment(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Stock adjustment failed: "
-                f"{str(exc)}"
-            ),
+            detail="Stock adjustment could not be completed.",
         )
 
 
