@@ -12,9 +12,11 @@ from app.models.customer import Customer
 from app.models.product_variant import (
     ProductVariant,
 )
+from app.models.product import Product
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.shop import Shop
+from app.models.stock import Stock
 
 from app.services.stock_movement import (
     record_stock_movement,
@@ -38,6 +40,7 @@ def generate_invoice():
 
 def create_sale(
     db: Session,
+    shop_id: int,
     data,
 ):
     try:
@@ -50,7 +53,7 @@ def create_sale(
             db.query(Shop)
             .filter(
                 Shop.id
-                == data.shop_id,
+                == shop_id,
             )
             .first()
         )
@@ -58,10 +61,7 @@ def create_sale(
         if not shop:
             raise HTTPException(
                 status_code=404,
-                detail=(
-                    f"Shop {data.shop_id} "
-                    f"not found."
-                ),
+                detail="Shop not found.",
             )
 
         # --------------------------------------------------
@@ -80,7 +80,7 @@ def create_sale(
                     == data.customer_id,
 
                     Customer.shop_id
-                    == data.shop_id,
+                    == shop_id,
                 )
                 .first()
             )
@@ -88,11 +88,7 @@ def create_sale(
             if not customer:
                 raise HTTPException(
                     status_code=404,
-                    detail=(
-                        f"Customer "
-                        f"{data.customer_id} "
-                        f"not found."
-                    ),
+                    detail="Customer not found.",
                 )
 
         # --------------------------------------------------
@@ -105,6 +101,22 @@ def create_sale(
                 detail=(
                     "At least one sale "
                     "item is required."
+                ),
+            )
+
+        variant_ids = [
+            item.variant_id
+            for item in data.items
+        ]
+
+        if len(variant_ids) != len(
+            set(variant_ids)
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Duplicate variant in "
+                    "sale items."
                 ),
             )
 
@@ -182,69 +194,50 @@ def create_sale(
             # Lock Variant
             # ------------------------------------------------
 
-            variant = (
+            variant_row = (
                 db.query(
-                    ProductVariant
+                    ProductVariant,
+                    Product,
                 )
-                .options(
-                    joinedload(
-                        ProductVariant.product
-                    ),
-                    joinedload(
-                        ProductVariant.stock
-                    ),
+                .join(
+                    Product,
+                    Product.id
+                    == ProductVariant.product_id,
                 )
                 .filter(
                     ProductVariant.id
                     == item.variant_id,
+
+                    Product.shop_id
+                    == shop_id,
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=ProductVariant
+                )
                 .first()
             )
 
-            if not variant:
+            if not variant_row:
                 raise HTTPException(
                     status_code=404,
-                    detail=(
-                        f"Variant "
-                        f"{item.variant_id} "
-                        f"not found."
-                    ),
+                    detail="Variant not found.",
                 )
 
-            product = (
-                variant.product
+            variant, product = (
+                variant_row
             )
 
             stock = (
-                variant.stock
+                db.query(Stock)
+                .filter(
+                    Stock.variant_id
+                    == variant.id,
+                )
+                .with_for_update(
+                    of=Stock
+                )
+                .first()
             )
-
-            if not product:
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        f"Product for "
-                        f"variant "
-                        f"{variant.id} "
-                        f"not found."
-                    ),
-                )
-
-            if (
-                product.shop_id
-                != data.shop_id
-            ):
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        f"Variant "
-                        f"{variant.id} "
-                        f"does not belong "
-                        f"to shop "
-                        f"{data.shop_id}."
-                    ),
-                )
 
             if not stock:
                 raise HTTPException(
@@ -498,7 +491,7 @@ def create_sale(
         # --------------------------------------------------
 
         sale = Sale(
-            shop_id=data.shop_id,
+            shop_id=shop_id,
             customer_id=
                 data.customer_id,
 
@@ -567,7 +560,7 @@ def create_sale(
                 record_stock_movement(
                     db=db,
                     shop_id=
-                        data.shop_id,
+                        shop_id,
 
                     variant_id=
                         variant.id,
@@ -623,7 +616,7 @@ def create_sale(
                 record_stock_movement(
                     db=db,
                     shop_id=
-                        data.shop_id,
+                        shop_id,
 
                     variant_id=
                         variant.id,
@@ -715,7 +708,7 @@ def create_sale(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
@@ -723,7 +716,7 @@ def create_sale(
             status_code=500,
             detail=(
                 "Sale creation "
-                f"failed: {str(exc)}"
+                "could not be completed."
             ),
         )
 
