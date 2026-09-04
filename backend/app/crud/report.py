@@ -93,6 +93,8 @@ def get_returned_cogs(
     db: Session,
     shop_id: int,
     sale_ids=None,
+    report_date=None,
+    month=None,
 ):
     """
     Calculate COGS associated with completed
@@ -135,6 +137,21 @@ def get_returned_cogs(
             SaleReturn.sale_id.in_(sale_ids)
         )
 
+    if report_date is not None:
+        query = query.filter(
+            func.date(
+                SaleReturn.created_at
+            ) == report_date
+        )
+
+    if month is not None:
+        query = query.filter(
+            func.to_char(
+                SaleReturn.created_at,
+                "YYYY-MM",
+            ) == month
+        )
+
     rows = query.all()
 
     returned_cogs = Decimal("0.00")
@@ -161,6 +178,8 @@ def get_sale_return_total(
     db: Session,
     shop_id: int,
     sale_ids=None,
+    report_date=None,
+    month=None,
 ):
     """
     Calculate refund amount from completed
@@ -189,6 +208,21 @@ def get_sale_return_total(
 
         query = query.filter(
             SaleReturn.sale_id.in_(sale_ids)
+        )
+
+    if report_date is not None:
+        query = query.filter(
+            func.date(
+                SaleReturn.created_at
+            ) == report_date
+        )
+
+    if month is not None:
+        query = query.filter(
+            func.to_char(
+                SaleReturn.created_at,
+                "YYYY-MM",
+            ) == month
         )
 
     return Decimal(
@@ -515,7 +549,7 @@ def get_daily_report(
     sales_return = get_sale_return_total(
         db=db,
         shop_id=shop_id,
-        sale_ids=sale_ids,
+        report_date=today,
     )
 
     net_sales = (
@@ -538,7 +572,7 @@ def get_daily_report(
     returned_cogs = get_returned_cogs(
         db=db,
         shop_id=shop_id,
-        sale_ids=sale_ids,
+        report_date=today,
     )
 
     cogs = (
@@ -787,7 +821,7 @@ def get_monthly_report(
         sales_return = get_sale_return_total(
             db=db,
             shop_id=shop_id,
-            sale_ids=sale_ids,
+            month=month,
         )
 
         net_sales = (
@@ -810,7 +844,7 @@ def get_monthly_report(
         returned_cogs = get_returned_cogs(
             db=db,
             shop_id=shop_id,
-            sale_ids=sale_ids,
+            month=month,
         )
 
         cogs = (
