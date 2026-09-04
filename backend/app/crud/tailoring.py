@@ -845,7 +845,7 @@ def create_tailoring_job(
             Bill.shop_id
             == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=BillItem)
         .first()
     )
 
@@ -1193,16 +1193,13 @@ def create_tailoring_job(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Tailoring job creation "
-                f"failed: {str(exc)}"
-            ),
+            detail="Tailoring job could not be created.",
         )
 
 
@@ -1310,7 +1307,7 @@ def update_tailoring_charge(
             TailoringJob.id == job_id,
             TailoringJob.shop_id == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=TailoringJob)
         .first()
     )
 
@@ -1369,14 +1366,11 @@ def update_tailoring_charge(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
         db.rollback()
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Tailoring charge update "
-                f"failed: {str(exc)}"
-            ),
+            detail="Tailoring charge could not be updated.",
         )
 
 
@@ -1403,7 +1397,7 @@ def update_tailoring_status(
             TailoringJob.shop_id
             == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=TailoringJob)
         .first()
     )
 
@@ -1643,16 +1637,13 @@ def update_tailoring_status(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Tailoring status update "
-                f"failed: {str(exc)}"
-            ),
+            detail="Tailoring status could not be updated.",
         )
 
 
@@ -1689,7 +1680,7 @@ def receive_tailoring_item(
             TailoringJob.shop_id
             == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=TailoringJob)
         .first()
     )
 
@@ -1824,16 +1815,13 @@ def receive_tailoring_item(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Tailoring receiving "
-                f"failed: {str(exc)}"
-            ),
+            detail="Tailoring receiving could not be completed.",
         )
 
 
@@ -1877,7 +1865,7 @@ def deliver_tailoring_item(
             TailoringJob.shop_id
             == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=TailoringJob)
         .first()
     )
 
@@ -1962,8 +1950,14 @@ def deliver_tailoring_item(
         .filter(
             BillItem.id
             == job.bill_item_id,
+
+            BillItem.bill_id
+            == job.bill_id,
+
+            BillItem.variant_id
+            == job.variant_id,
         )
-        .with_for_update()
+        .with_for_update(of=BillItem)
         .first()
     )
 
@@ -1992,7 +1986,7 @@ def deliver_tailoring_item(
             Bill.shop_id
             == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=Bill)
         .first()
     )
 
@@ -2017,8 +2011,14 @@ def deliver_tailoring_item(
         .filter(
             SaleItem.id
             == job.sale_item_id,
+
+            SaleItem.sale_id
+            == bill.sale_id,
+
+            SaleItem.variant_id
+            == job.variant_id,
         )
-        .with_for_update()
+        .with_for_update(of=SaleItem)
         .first()
     )
 
@@ -2364,14 +2364,11 @@ def deliver_tailoring_item(
         db.rollback()
         raise
 
-    except Exception as exc:
+    except Exception:
 
         db.rollback()
 
         raise HTTPException(
             status_code=500,
-            detail=(
-                "Tailoring delivery "
-                f"failed: {str(exc)}"
-            ),
+            detail="Tailoring delivery could not be completed.",
         )
