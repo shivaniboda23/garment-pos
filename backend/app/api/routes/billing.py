@@ -55,9 +55,7 @@ def create_bill_api(
         if bill is None:
             raise HTTPException(
                 status_code=404,
-                detail=(
-                    "Shop or customer not found."
-                ),
+                detail="Customer not found.",
             )
 
         return bill
@@ -71,12 +69,10 @@ def create_bill_api(
             detail=str(exc),
         )
 
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail=(
-                f"Billing failed: {str(exc)}"
-            ),
+            detail="Billing could not be completed.",
         )
 
 
