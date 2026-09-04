@@ -13,6 +13,7 @@ from app.models.payment import Payment
 from app.models.product_variant import (
     ProductVariant,
 )
+from app.models.product import Product
 from app.models.sale import Sale
 from app.models.sale_item import SaleItem
 from app.models.stock import Stock
@@ -44,6 +45,18 @@ def create_bill(
         raise ValueError(
             "At least one bill item "
             "is required."
+        )
+
+    variant_ids = [
+        item.variant_id
+        for item in data.items
+    ]
+
+    if len(variant_ids) != len(
+        set(variant_ids)
+    ):
+        raise ValueError(
+            "Duplicate variant in bill items."
         )
 
     # ======================================================
@@ -126,46 +139,37 @@ def create_bill(
             # VARIANT
             # ------------------------------------------------
 
-            variant = (
+            variant_row = (
                 db.query(
-                    ProductVariant
+                    ProductVariant,
+                    Product,
+                )
+                .join(
+                    Product,
+                    Product.id
+                    == ProductVariant.product_id,
                 )
                 .filter(
                     ProductVariant.id
-                    == item.variant_id
+                    == item.variant_id,
+
+                    Product.shop_id
+                    == shop_id,
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=ProductVariant
+                )
                 .first()
             )
 
-            if not variant:
+            if not variant_row:
                 raise ValueError(
-                    f"Variant "
-                    f"{item.variant_id} "
-                    f"not found."
+                    "Variant not found."
                 )
 
-            product = (
-                variant.product
+            variant, product = (
+                variant_row
             )
-
-            if not product:
-                raise ValueError(
-                    f"Product for variant "
-                    f"{variant.id} "
-                    f"not found."
-                )
-
-            if (
-                product.shop_id
-                != shop_id
-            ):
-                raise ValueError(
-                    f"Variant "
-                    f"{variant.id} "
-                    f"does not belong "
-                    f"to this shop."
-                )
 
             # ------------------------------------------------
             # LOCK STOCK
@@ -177,7 +181,9 @@ def create_bill(
                     Stock.variant_id
                     == variant.id
                 )
-                .with_for_update()
+                .with_for_update(
+                    of=Stock
+                )
                 .first()
             )
 
@@ -387,7 +393,7 @@ def create_bill(
             totals = (
                 calculate_line_totals(
                     selling_price=
-                        item.selling_price,
+                        variant_selling_price,
 
                     ordered_qty=
                         ordered_qty,
@@ -396,7 +402,7 @@ def create_bill(
                         item.discount,
 
                     gst_percentage=
-                        item.gst_percentage,
+                        product.gst_percentage,
                 )
             )
 
@@ -502,6 +508,12 @@ def create_bill(
 
             sale_item_data.append(
                 {
+                    "variant":
+                        variant,
+
+                    "stock":
+                        stock,
+
                     "variant_id":
                         variant.id,
 
@@ -752,43 +764,12 @@ def create_bill(
         ):
 
             variant = (
-                db.query(
-                    ProductVariant
-                )
-                .filter(
-                    ProductVariant.id
-                    == row[
-                        "variant_id"
-                    ]
-                )
-                .with_for_update()
-                .first()
+                row["variant"]
             )
-
-            if not variant:
-                raise ValueError(
-                    f"Variant "
-                    f"{row['variant_id']} "
-                    f"not found while "
-                    f"saving sale."
-                )
 
             stock = (
-                db.query(Stock)
-                .filter(
-                    Stock.variant_id
-                    == variant.id
-                )
-                .with_for_update()
-                .first()
+                row["stock"]
             )
-
-            if not stock:
-                raise ValueError(
-                    f"Stock not found "
-                    f"for variant "
-                    f"{variant.id}."
-                )
 
             # ------------------------------------------------
             # FINAL K CHECK
