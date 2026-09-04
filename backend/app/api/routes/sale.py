@@ -7,6 +7,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.crud.sale import (
     create_sale,
@@ -37,19 +38,13 @@ router = APIRouter(
 def add_sale(
     request: SaleCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     sale = create_sale(
-        db,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        data=request,
     )
-
-    if sale is None:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Shop or Customer not found."
-            ),
-        )
 
     return sale
 
@@ -64,13 +59,11 @@ def sales_history(
     customer_id: int | None = None,
     date: str | None = None,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # Current shop used by the mobile app.
-    shop_id = 3
-
     sales = get_all_sales(
         db=db,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
         invoice=invoice,
         customer_id=customer_id,
         date=date,
@@ -87,14 +80,12 @@ def sales_history(
 def sale_details(
     sale_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
-    # Current shop used by the mobile app.
-    shop_id = 3
-
     sale = get_sale_by_id(
         db=db,
         sale_id=sale_id,
-        shop_id=shop_id,
+        shop_id=current_user.shop_id,
     )
 
     if not sale:

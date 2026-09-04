@@ -79,8 +79,6 @@ class SaleItemCreate(BaseModel):
 
 class SaleCreate(BaseModel):
 
-    shop_id: int
-
     customer_id: Optional[int] = None
 
     payment_method: str = "Cash"
