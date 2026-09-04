@@ -751,38 +751,104 @@ def get_monthly_report(
     db: Session,
     shop_id: int,
 ):
-    months = (
-        db.query(
-            func.to_char(
-                Sale.created_at,
-                "YYYY-MM",
-            ).label(
-                "month"
+    month_rows_by_source = [
+        (
+            db.query(
+                func.to_char(
+                    Sale.created_at,
+                    "YYYY-MM",
+                ).label("month")
             )
-        )
-        .filter(
-            Sale.shop_id == shop_id,
-        )
-        .group_by(
-            func.to_char(
-                Sale.created_at,
-                "YYYY-MM",
+            .filter(
+                Sale.shop_id == shop_id,
             )
-        )
-        .order_by(
-            func.to_char(
-                Sale.created_at,
-                "YYYY-MM",
+            .distinct()
+            .all()
+        ),
+        (
+            db.query(
+                func.to_char(
+                    SaleReturn.created_at,
+                    "YYYY-MM",
+                ).label("month")
             )
-        )
-        .all()
+            .filter(
+                SaleReturn.shop_id == shop_id,
+                SaleReturn.status == "Completed",
+            )
+            .distinct()
+            .all()
+        ),
+        (
+            db.query(
+                func.to_char(
+                    Purchase.created_at,
+                    "YYYY-MM",
+                ).label("month")
+            )
+            .filter(
+                Purchase.shop_id == shop_id,
+            )
+            .distinct()
+            .all()
+        ),
+        (
+            db.query(
+                func.to_char(
+                    PurchaseReturn.created_at,
+                    "YYYY-MM",
+                ).label("month")
+            )
+            .filter(
+                PurchaseReturn.shop_id == shop_id,
+                PurchaseReturn.status == "Completed",
+            )
+            .distinct()
+            .all()
+        ),
+        (
+            db.query(
+                func.to_char(
+                    Expense.created_at,
+                    "YYYY-MM",
+                ).label("month")
+            )
+            .filter(
+                Expense.shop_id == shop_id,
+            )
+            .distinct()
+            .all()
+        ),
+        (
+            db.query(
+                func.to_char(
+                    TailoringJob.received_at,
+                    "YYYY-MM",
+                ).label("month")
+            )
+            .filter(
+                TailoringJob.shop_id == shop_id,
+                TailoringJob.status != "Cancelled",
+                TailoringJob.received_quantity > 0,
+                TailoringJob.received_at.isnot(None),
+            )
+            .distinct()
+            .all()
+        ),
+    ]
+
+    months = sorted(
+        {
+            row.month
+            for source_rows in month_rows_by_source
+            for row in source_rows
+            if row.month is not None
+        }
     )
 
     report = []
 
-    for month_row in months:
-
-        month = month_row.month
+    for month in months:
 
         # --------------------------------------------------
         # SALES
