@@ -4,8 +4,6 @@ from pydantic import BaseModel, EmailStr
 
 
 class CustomerCreate(BaseModel):
-    shop_id: int
-
     customer_name: str
 
     phone: str

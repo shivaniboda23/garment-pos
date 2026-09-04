@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
 from app.models.customer import Customer
 from app.models.shop import Shop
@@ -6,12 +7,13 @@ from app.models.shop import Shop
 
 def create_customer(
     db: Session,
+    shop_id: int,
     data,
 ):
     # Check shop exists
     shop = (
         db.query(Shop)
-        .filter(Shop.id == data.shop_id)
+        .filter(Shop.id == shop_id)
         .first()
     )
 
@@ -29,7 +31,7 @@ def create_customer(
         return None
 
     customer = Customer(
-        shop_id=data.shop_id,
+        shop_id=shop_id,
         customer_name=data.customer_name,
         phone=data.phone,
         email=data.email,
@@ -37,9 +39,13 @@ def create_customer(
         gst_number=data.gst_number,
     )
 
-    db.add(customer)
-    db.commit()
-    db.refresh(customer)
+    try:
+        db.add(customer)
+        db.commit()
+        db.refresh(customer)
+    except IntegrityError:
+        db.rollback()
+        return None
 
     return customer
 
@@ -60,23 +66,29 @@ def get_customers(
 
 def get_customer(
     db: Session,
+    shop_id: int,
     customer_id: int,
 ):
     return (
         db.query(Customer)
-        .filter(Customer.id == customer_id)
+        .filter(
+            Customer.id == customer_id,
+            Customer.shop_id == shop_id,
+        )
         .first()
     )
 
 
 def update_customer(
     db: Session,
+    shop_id: int,
     customer_id: int,
     data,
 ):
     customer = get_customer(
-        db,
-        customer_id,
+        db=db,
+        shop_id=shop_id,
+        customer_id=customer_id,
     )
 
     if not customer:
@@ -107,19 +119,25 @@ def update_customer(
             value,
         )
 
-    db.commit()
-    db.refresh(customer)
+    try:
+        db.commit()
+        db.refresh(customer)
+    except IntegrityError:
+        db.rollback()
+        return None
 
     return customer
 
 
 def delete_customer(
     db: Session,
+    shop_id: int,
     customer_id: int,
 ):
     customer = get_customer(
-        db,
-        customer_id,
+        db=db,
+        shop_id=shop_id,
+        customer_id=customer_id,
     )
 
     if not customer:
