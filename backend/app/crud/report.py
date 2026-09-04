@@ -665,7 +665,7 @@ def get_daily_report(
             )
             .filter(
                 Expense.shop_id == shop_id,
-                func.date(Expense.created_at) == today,
+                func.date(Expense.expense_date) == today,
             )
             .scalar()
             or 0
@@ -809,7 +809,7 @@ def get_monthly_report(
         (
             db.query(
                 func.to_char(
-                    Expense.created_at,
+                    Expense.expense_date,
                     "YYYY-MM",
                 ).label("month")
             )
@@ -1003,7 +1003,7 @@ def get_monthly_report(
                 .filter(
                     Expense.shop_id == shop_id,
                     func.to_char(
-                        Expense.created_at,
+                        Expense.expense_date,
                         "YYYY-MM",
                     ) == month,
                 )
