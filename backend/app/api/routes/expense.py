@@ -215,7 +215,8 @@ def total_expense(
 
 
 @router.get(
-    "/category/{category_id}",
+    "/by-category/{category_id}",
+    response_model=list[ExpenseResponse],
 )
 def expenses_by_category(
     category_id: int,
@@ -251,7 +252,7 @@ def add_expense(
     if expense is None:
         raise HTTPException(
             status_code=404,
-            detail="Shop or Category not found",
+            detail="Expense Category not found",
         )
 
     return expense
