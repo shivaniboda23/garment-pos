@@ -7,6 +7,7 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.dependencies import get_current_user
 
 from app.schemas.customer import (
     CustomerCreate,
@@ -36,16 +37,21 @@ router = APIRouter(
 def add_customer(
     request: CustomerCreate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     customer = create_customer(
-        db,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        data=request,
     )
 
     if customer is None:
         raise HTTPException(
             status_code=400,
-            detail="Invalid shop or phone number already exists",
+            detail=(
+                "Invalid customer data or "
+                "phone number already exists"
+            ),
         )
 
     return customer
@@ -58,10 +64,11 @@ def add_customer(
 def list_customers(
     shop_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     return get_customers(
-        db,
-        shop_id,
+        db=db,
+        shop_id=current_user.shop_id,
     )
 
 
@@ -72,10 +79,12 @@ def list_customers(
 def customer_details(
     customer_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     customer = get_customer(
-        db,
-        customer_id,
+        db=db,
+        shop_id=current_user.shop_id,
+        customer_id=customer_id,
     )
 
     if customer is None:
@@ -95,11 +104,13 @@ def edit_customer(
     customer_id: int,
     request: CustomerUpdate,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     customer = update_customer(
-        db,
-        customer_id,
-        request,
+        db=db,
+        shop_id=current_user.shop_id,
+        customer_id=customer_id,
+        data=request,
     )
 
     if customer is None:
@@ -117,10 +128,12 @@ def edit_customer(
 def remove_customer(
     customer_id: int,
     db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
 ):
     success = delete_customer(
-        db,
-        customer_id,
+        db=db,
+        shop_id=current_user.shop_id,
+        customer_id=customer_id,
     )
 
     if not success:
