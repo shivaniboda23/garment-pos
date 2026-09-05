@@ -28,7 +28,7 @@ def create_customer_payment(
             Bill.id == data.bill_id,
             Bill.shop_id == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=Bill)
         .first()
     )
 
@@ -156,8 +156,10 @@ def create_customer_payment(
                 "0.00"
             )
 
-        if new_due == 0:
+        if new_paid >= grand_total:
             bill.payment_status = "Paid"
+        elif new_paid > 0:
+            bill.payment_status = "Partial"
         else:
             bill.payment_status = "Pending"
 
