@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.purchase import Purchase
@@ -14,6 +13,10 @@ from app.models.supplier_credit_application import (
 from app.schemas.supplier_payment import (
     SupplierPaymentCreate,
     SupplierCreditApplicationCreate,
+)
+from app.services.supplier_accounting import (
+    get_purchase_accounting,
+    get_supplier_accounting,
 )
 
 
@@ -48,7 +51,7 @@ def create_supplier_payment(
             Purchase.id == data.purchase_id,
             Purchase.shop_id == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=Purchase)
         .first()
     )
 
@@ -75,9 +78,11 @@ def create_supplier_payment(
             detail="Payment amount must be greater than zero.",
         )
 
-    current_balance = Decimal(
-        str(purchase.balance_amount or 0)
-    )
+    current_balance = get_purchase_accounting(
+        db=db,
+        shop_id=shop_id,
+        purchase=purchase,
+    ).effective_due
 
     if current_balance <= 0:
         raise HTTPException(
@@ -116,14 +121,10 @@ def create_supplier_payment(
 
         new_paid = current_paid + amount
 
-        grand_total = Decimal(
-            str(purchase.grand_total or 0)
+        new_balance = max(
+            current_balance - amount,
+            Decimal("0.00"),
         )
-
-        new_balance = grand_total - new_paid
-
-        if new_balance < 0:
-            new_balance = Decimal("0.00")
 
         purchase.paid_amount = new_paid
         purchase.balance_amount = new_balance
@@ -160,6 +161,7 @@ def apply_supplier_credit(
             Supplier.shop_id == shop_id,
             Supplier.is_active == True,
         )
+        .with_for_update(of=Supplier)
         .first()
     )
 
@@ -175,7 +177,7 @@ def apply_supplier_credit(
             Purchase.id == data.purchase_id,
             Purchase.shop_id == shop_id,
         )
-        .with_for_update()
+        .with_for_update(of=Purchase)
         .first()
     )
 
@@ -205,9 +207,11 @@ def apply_supplier_credit(
             ),
         )
 
-    current_balance = Decimal(
-        str(purchase.balance_amount or 0)
-    )
+    current_balance = get_purchase_accounting(
+        db=db,
+        shop_id=shop_id,
+        purchase=purchase,
+    ).effective_due
 
     if current_balance <= 0:
         raise HTTPException(
@@ -228,105 +232,15 @@ def apply_supplier_credit(
             ),
         )
 
-    total_purchase_returns = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    PurchaseReturn.total_amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            PurchaseReturn.shop_id == shop_id,
-            PurchaseReturn.supplier_id == supplier.id,
-            PurchaseReturn.status == "Completed",
-        )
-        .scalar()
-    )
-
-    total_payments = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    SupplierPayment.amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            SupplierPayment.shop_id == shop_id,
-            SupplierPayment.supplier_id == supplier.id,
-        )
-        .scalar()
-    )
-
-    total_credit_applied = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    SupplierCreditApplication.amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            SupplierCreditApplication.shop_id == shop_id,
-            SupplierCreditApplication.supplier_id == supplier.id,
-        )
-        .scalar()
-    )
-
-    total_purchases = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    Purchase.grand_total
-                ),
-                0,
-            )
-        )
-        .filter(
-            Purchase.shop_id == shop_id,
-            Purchase.supplier_id == supplier.id,
-        )
-        .scalar()
-    )
-
-    opening_balance = Decimal(
-        str(
-            supplier.opening_balance or 0
-        )
-    )
-
-    total_purchases = Decimal(
-        str(total_purchases or 0)
-    )
-
-    total_purchase_returns = Decimal(
-        str(total_purchase_returns or 0)
-    )
-
-    total_payments = Decimal(
-        str(total_payments or 0)
-    )
-
-    total_credit_applied = Decimal(
-        str(total_credit_applied or 0)
-    )
-
-    current_position = (
-        opening_balance
-        + total_purchases
-        - total_purchase_returns
-        - total_payments
-        - total_credit_applied
+    supplier_accounting = get_supplier_accounting(
+        db=db,
+        shop_id=shop_id,
+        supplier_id=supplier.id,
+        opening_balance=supplier.opening_balance,
     )
 
     available_credit = (
-        abs(current_position)
-        if current_position < 0
-        else Decimal("0.00")
+        supplier_accounting.unallocated_credit
     )
 
     if amount > available_credit:
@@ -573,127 +487,30 @@ def get_supplier_balance_summary(
             detail="Supplier not found.",
         )
 
-    total_purchases = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    Purchase.grand_total
-                ),
-                0,
-            )
-        )
-        .filter(
-            Purchase.shop_id == shop_id,
-            Purchase.supplier_id == supplier_id,
-        )
-        .scalar()
-    )
-
-    total_purchase_returns = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    PurchaseReturn.total_amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            PurchaseReturn.shop_id == shop_id,
-            PurchaseReturn.supplier_id == supplier_id,
-            PurchaseReturn.status == "Completed",
-        )
-        .scalar()
-    )
-
-    total_payments = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    SupplierPayment.amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            SupplierPayment.shop_id == shop_id,
-            SupplierPayment.supplier_id == supplier_id,
-        )
-        .scalar()
-    )
-
-    total_credit_applied = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    SupplierCreditApplication.amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            SupplierCreditApplication.shop_id == shop_id,
-            SupplierCreditApplication.supplier_id == supplier_id,
-        )
-        .scalar()
-    )
-
-    total_purchases = Decimal(
-        str(total_purchases or 0)
-    )
-
-    total_purchase_returns = Decimal(
-        str(
-            total_purchase_returns or 0
-        )
-    )
-
-    total_payments = Decimal(
-        str(total_payments or 0)
-    )
-
-    total_credit_applied = Decimal(
-        str(
-            total_credit_applied or 0
-        )
-    )
-
     opening_balance = Decimal(
         str(
             supplier.opening_balance or 0
         )
     )
-
-    net_position = (
-        opening_balance
-        + total_purchases
-        - total_purchase_returns
-        - total_payments
-        - total_credit_applied
+    accounting = get_supplier_accounting(
+        db=db,
+        shop_id=shop_id,
+        supplier_id=supplier_id,
+        opening_balance=opening_balance,
     )
-
-    if net_position > 0:
-        payable = net_position
-        supplier_credit = Decimal("0.00")
-    elif net_position < 0:
-        payable = Decimal("0.00")
-        supplier_credit = abs(net_position)
-    else:
-        payable = Decimal("0.00")
-        supplier_credit = Decimal("0.00")
 
     return {
         "supplier_id": supplier.id,
         "supplier_name": supplier.supplier_name,
         "opening_balance": opening_balance,
-        "total_purchases": total_purchases,
-        "total_purchase_returns": total_purchase_returns,
-        "total_payments": total_payments,
-        "total_credit_applied": total_credit_applied,
-        "payable": payable,
-        "supplier_credit": supplier_credit,
-        "net_position": net_position,
-        "transaction_outstanding": payable,
+        "total_purchases": accounting.total_purchases,
+        "total_purchase_returns": accounting.total_purchase_returns,
+        "total_payments": accounting.total_payments,
+        "total_credit_applied": accounting.total_credit_applied,
+        "payable": accounting.payable,
+        "supplier_credit": accounting.unallocated_credit,
+        "net_position": accounting.net_position,
+        "transaction_outstanding": accounting.payable,
     }
 
 
@@ -709,7 +526,6 @@ def get_all_supplier_dues(
         db.query(Purchase)
         .filter(
             Purchase.shop_id == shop_id,
-            Purchase.balance_amount > 0,
         )
         .order_by(
             Purchase.created_at.desc(),
@@ -735,11 +551,11 @@ def get_all_supplier_dues(
         if not supplier:
             continue
 
-        balance = Decimal(
-            str(
-                purchase.balance_amount or 0
-            )
-        )
+        balance = get_purchase_accounting(
+            db=db,
+            shop_id=shop_id,
+            purchase=purchase,
+        ).effective_due
 
         if balance <= 0:
             continue
@@ -940,7 +756,12 @@ def get_supplier_ledger(
                         or 0
                     )
                 ),
-                "credit": Decimal("0.00"),
+                "credit": Decimal(
+                    str(
+                        application.amount
+                        or 0
+                    )
+                ),
                 "id": application.id,
                 "priority": priority[
                     "Credit Application"
@@ -956,7 +777,9 @@ def get_supplier_ledger(
         )
     )
 
-    running_balance = Decimal("0.00")
+    running_balance = Decimal(
+        str(supplier.opening_balance or 0)
+    )
     entries = []
 
     for transaction in transactions:
@@ -996,19 +819,12 @@ def get_supplier_ledger(
             }
         )
 
-    if running_balance > 0:
-        payable = running_balance
-        supplier_credit = Decimal("0.00")
-
-    elif running_balance < 0:
-        payable = Decimal("0.00")
-        supplier_credit = abs(
-            running_balance
-        )
-
-    else:
-        payable = Decimal("0.00")
-        supplier_credit = Decimal("0.00")
+    accounting = get_supplier_accounting(
+        db=db,
+        shop_id=shop_id,
+        supplier_id=supplier_id,
+        opening_balance=supplier.opening_balance,
+    )
 
     return {
         "supplier_id":
@@ -1029,14 +845,14 @@ def get_supplier_ledger(
             entries,
 
         "payable":
-            payable,
+            accounting.payable,
 
         "supplier_credit":
-            supplier_credit,
+            accounting.unallocated_credit,
 
         "net_position":
-            running_balance,
+            accounting.net_position,
 
         "transaction_outstanding":
-            payable,
+            accounting.payable,
     }
