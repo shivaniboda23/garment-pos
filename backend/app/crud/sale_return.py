@@ -1,5 +1,5 @@
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN, ROUND_HALF_UP
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -19,6 +19,8 @@ from app.models.product_variant import (
 )
 from app.models.product import Product
 from app.models.stock import Stock
+from app.models.bill import Bill
+from app.models.bill_item import BillItem
 
 from app.services.stock_movement import (
     record_stock_movement,
@@ -49,56 +51,565 @@ def create_sale_return(
     shop_id: int,
     data,
 ):
-
-    # ------------------------------------------------------
-    # Validate Sale
-    # ------------------------------------------------------
-
-    sale = (
-        db.query(Sale)
-        .filter(
-            Sale.id == data.sale_id,
-            Sale.shop_id == shop_id,
-        )
-        .first()
-    )
-
-    if not sale:
-        raise HTTPException(
-            status_code=404,
-            detail="Sale not found.",
-        )
-
-    # ------------------------------------------------------
-    # Validate Customer
-    # ------------------------------------------------------
-
-    if (
-        sale.customer_id
-        != data.customer_id
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Customer does not match "
-                "the selected sale."
-            ),
-        )
-
-    # ------------------------------------------------------
-    # Validate Items
-    # ------------------------------------------------------
-
-    if not data.items:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "At least one return "
-                "item is required."
-            ),
-        )
-
     try:
+        money_unit = Decimal("0.01")
+
+        # The Sale row serializes every financial return for
+        # this sale before any historical totals are read.
+        sale = (
+            db.query(Sale)
+            .filter(
+                Sale.id == data.sale_id,
+                Sale.shop_id == shop_id,
+            )
+            .with_for_update(of=Sale)
+            .first()
+        )
+
+        if not sale:
+            raise HTTPException(
+                status_code=404,
+                detail="Sale not found.",
+            )
+
+        if sale.customer_id != data.customer_id:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Customer does not match "
+                    "the selected sale."
+                ),
+            )
+
+        if not data.items:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "At least one return "
+                    "item is required."
+                ),
+            )
+
+        if Decimal(str(data.refund_amount)) < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Refund amount cannot be negative.",
+            )
+
+        variant_ids = [
+            item.variant_id
+            for item in data.items
+        ]
+
+        if len(variant_ids) != len(set(variant_ids)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Duplicate variant in "
+                    "sale return items."
+                ),
+            )
+
+        requested_items = sorted(
+            data.items,
+            key=lambda item: item.variant_id,
+        )
+
+        # Lock every SaleItem in a deterministic order. A
+        # duplicate historical variant is ambiguous and must
+        # never be resolved by selecting an arbitrary row.
+        sale_items = (
+            db.query(SaleItem)
+            .filter(SaleItem.sale_id == sale.id)
+            .order_by(
+                SaleItem.variant_id.asc(),
+                SaleItem.id.asc(),
+            )
+            .with_for_update(of=SaleItem)
+            .all()
+        )
+
+        sale_items_by_variant = {}
+
+        for sale_item in sale_items:
+            if sale_item.variant_id in sale_items_by_variant:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Sale contains ambiguous duplicate "
+                        "variant items."
+                    ),
+                )
+
+            sale_items_by_variant[
+                sale_item.variant_id
+            ] = sale_item
+
+        for item in requested_items:
+            if item.variant_id not in sale_items_by_variant:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Variant not found in Sale.",
+                )
+
+        # Modern bills provide the authoritative ordered
+        # quantity. Sales without a Bill use their historical
+        # delivered SaleItem quantity as the legacy fallback.
+        bill = (
+            db.query(Bill)
+            .filter(
+                Bill.sale_id == sale.id,
+                Bill.shop_id == shop_id,
+            )
+            .first()
+        )
+
+        bill_items_by_variant = {}
+
+        if bill:
+            bill_items = (
+                db.query(BillItem)
+                .filter(BillItem.bill_id == bill.id)
+                .order_by(
+                    BillItem.variant_id.asc(),
+                    BillItem.id.asc(),
+                )
+                .all()
+            )
+
+            for bill_item in bill_items:
+                if bill_item.variant_id in bill_items_by_variant:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Bill contains ambiguous duplicate "
+                            "variant items."
+                        ),
+                    )
+
+                bill_items_by_variant[
+                    bill_item.variant_id
+                ] = bill_item
+
+        historical_rows = (
+            db.query(
+                SaleReturnItem.variant_id,
+                func.coalesce(
+                    func.sum(SaleReturnItem.quantity),
+                    0,
+                ).label("quantity"),
+                func.coalesce(
+                    func.sum(SaleReturnItem.k_quantity),
+                    0,
+                ).label("k_quantity"),
+                func.coalesce(
+                    func.sum(SaleReturnItem.r_quantity),
+                    0,
+                ).label("r_quantity"),
+            )
+            .join(
+                SaleReturn,
+                SaleReturnItem.sale_return_id
+                == SaleReturn.id,
+            )
+            .filter(
+                SaleReturn.shop_id == shop_id,
+                SaleReturn.sale_id == sale.id,
+                SaleReturn.status == "Completed",
+            )
+            .group_by(SaleReturnItem.variant_id)
+            .all()
+        )
+
+        historical_by_variant = {
+            row.variant_id: {
+                "quantity": int(row.quantity or 0),
+                "k_quantity": int(row.k_quantity or 0),
+                "r_quantity": int(row.r_quantity or 0),
+            }
+            for row in historical_rows
+        }
+
+        economic_rows = {}
+        total_remaining_economic_qty = 0
+        total_remaining_weight = Decimal("0")
+
+        for variant_id, sale_item in (
+            sale_items_by_variant.items()
+        ):
+            if bill:
+                bill_item = bill_items_by_variant.get(
+                    variant_id
+                )
+
+                if not bill_item:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Bill item is missing for a "
+                            "sale variant."
+                        ),
+                    )
+
+                economic_ordered_qty = int(
+                    bill_item.ordered_qty or 0
+                )
+            else:
+                economic_ordered_qty = int(
+                    sale_item.quantity or 0
+                )
+
+            if economic_ordered_qty <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Sale item has invalid economic "
+                        "quantity."
+                    ),
+                )
+
+            line_total = Decimal(
+                str(sale_item.total_price or 0)
+            )
+
+            if line_total < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Sale item has invalid economic "
+                        "value."
+                    ),
+                )
+
+            historical = historical_by_variant.get(
+                variant_id,
+                {
+                    "quantity": 0,
+                    "k_quantity": 0,
+                    "r_quantity": 0,
+                },
+            )
+            historical_quantity = historical["quantity"]
+
+            if historical_quantity > economic_ordered_qty:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Historical return quantity is "
+                        "inconsistent with the sale."
+                    ),
+                )
+
+            remaining_economic_qty = (
+                economic_ordered_qty
+                - historical_quantity
+            )
+            unit_weight = (
+                line_total
+                / Decimal(economic_ordered_qty)
+            )
+            remaining_weight = (
+                Decimal(remaining_economic_qty)
+                * unit_weight
+            )
+
+            economic_rows[variant_id] = {
+                "sale_item": sale_item,
+                "historical": historical,
+                "remaining_economic_qty": (
+                    remaining_economic_qty
+                ),
+                "unit_weight": unit_weight,
+                "remaining_weight": remaining_weight,
+            }
+            total_remaining_economic_qty += (
+                remaining_economic_qty
+            )
+            total_remaining_weight += remaining_weight
+
+        # Quantity is used only when every remaining economic
+        # line is zero-valued. Positive lines retain their true
+        # relative economic weight.
+        if (
+            total_remaining_economic_qty > 0
+            and total_remaining_weight == 0
+        ):
+            total_remaining_weight = Decimal("0")
+
+            for row in economic_rows.values():
+                if row["remaining_economic_qty"] > 0:
+                    row["unit_weight"] = Decimal("1")
+                    row["remaining_weight"] = Decimal(
+                        row["remaining_economic_qty"]
+                    )
+                    total_remaining_weight += row[
+                        "remaining_weight"
+                    ]
+
+        requested_quantity_by_variant = {
+            item.variant_id: item.quantity
+            for item in requested_items
+        }
+        requested_weight_by_variant = {}
+        requested_total_weight = Decimal("0")
+
+        for item in requested_items:
+            row = economic_rows[item.variant_id]
+
+            if item.quantity <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Return quantity must be greater "
+                        "than zero."
+                    ),
+                )
+
+            if item.k_quantity < 0 or item.r_quantity < 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Return stock quantity cannot be "
+                        "negative."
+                    ),
+                )
+
+            if item.quantity != (
+                item.k_quantity + item.r_quantity
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Quantity must equal K Quantity + "
+                        "R Quantity."
+                    ),
+                )
+
+            if item.quantity > row["remaining_economic_qty"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Return quantity exceeds the "
+                        "remaining economic quantity for "
+                        f"Variant {item.variant_id}."
+                    ),
+                )
+
+            item_weight = (
+                Decimal(item.quantity)
+                * row["unit_weight"]
+            )
+            requested_weight_by_variant[
+                item.variant_id
+            ] = item_weight
+            requested_total_weight += item_weight
+
+        # Lock requested variants and stocks in global ID order
+        # before any inventory mutation.
+        locked_variants = (
+            db.query(ProductVariant)
+            .join(
+                Product,
+                Product.id == ProductVariant.product_id,
+            )
+            .filter(
+                ProductVariant.id.in_(variant_ids),
+                Product.shop_id == shop_id,
+            )
+            .order_by(ProductVariant.id.asc())
+            .with_for_update(of=ProductVariant)
+            .all()
+        )
+        variants_by_id = {
+            variant.id: variant
+            for variant in locked_variants
+        }
+
+        if len(variants_by_id) != len(variant_ids):
+            raise HTTPException(
+                status_code=404,
+                detail="Variant not found.",
+            )
+
+        locked_stocks = (
+            db.query(Stock)
+            .filter(Stock.variant_id.in_(variant_ids))
+            .order_by(Stock.variant_id.asc())
+            .with_for_update(of=Stock)
+            .all()
+        )
+        stocks_by_variant = {
+            stock.variant_id: stock
+            for stock in locked_stocks
+        }
+
+        if len(stocks_by_variant) != len(variant_ids):
+            raise HTTPException(
+                status_code=500,
+                detail="Stock record not found for variant.",
+            )
+
+        for item in requested_items:
+            row = economic_rows[item.variant_id]
+            sale_item = row["sale_item"]
+            historical = row["historical"]
+            remaining_k = max(
+                int(sale_item.k_quantity or 0)
+                - historical["k_quantity"],
+                0,
+            )
+            remaining_r = max(
+                int(sale_item.r_quantity or 0)
+                - historical["r_quantity"],
+                0,
+            )
+
+            if item.k_quantity > remaining_k:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Cannot return {item.k_quantity} K "
+                        f"units for Variant {item.variant_id}. "
+                        f"Only {remaining_k} K units are "
+                        "still returnable."
+                    ),
+                )
+
+            if item.r_quantity > remaining_r:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Cannot return {item.r_quantity} R "
+                        f"units for Variant {item.variant_id}. "
+                        f"Only {remaining_r} R units are "
+                        "still returnable."
+                    ),
+                )
+
+        historical_refund_total = Decimal(
+            str(
+                db.query(
+                    func.coalesce(
+                        func.sum(SaleReturn.refund_amount),
+                        0,
+                    )
+                )
+                .filter(
+                    SaleReturn.shop_id == shop_id,
+                    SaleReturn.sale_id == sale.id,
+                    SaleReturn.status == "Completed",
+                )
+                .scalar()
+                or 0
+            )
+        )
+        sale_total = Decimal(str(sale.total_amount or 0))
+
+        if sale_total < 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Sale has invalid economic value.",
+            )
+
+        remaining_refund_pool = max(
+            sale_total - historical_refund_total,
+            Decimal("0.00"),
+        )
+        all_remaining_returned = all(
+            requested_quantity_by_variant.get(
+                variant_id,
+                0,
+            ) == row["remaining_economic_qty"]
+            for variant_id, row in economic_rows.items()
+        )
+
+        if remaining_refund_pool <= 0:
+            authoritative_refund = Decimal("0.00")
+        elif all_remaining_returned:
+            authoritative_refund = remaining_refund_pool
+        elif requested_total_weight <= 0:
+            authoritative_refund = Decimal("0.00")
+        else:
+            if total_remaining_weight <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Remaining sale value cannot be "
+                        "allocated safely."
+                    ),
+                )
+
+            authoritative_refund = (
+                remaining_refund_pool
+                * requested_total_weight
+                / total_remaining_weight
+            ).quantize(
+                money_unit,
+                rounding=ROUND_HALF_UP,
+            )
+
+            if authoritative_refund > remaining_refund_pool:
+                difference = (
+                    authoritative_refund
+                    - remaining_refund_pool
+                )
+
+                if difference <= money_unit:
+                    authoritative_refund = (
+                        remaining_refund_pool
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "Calculated refund exceeds the "
+                            "remaining sale value."
+                        ),
+                    )
+
+        item_refunds = {}
+        allocated_refund = Decimal("0.00")
+
+        residue_variant_id = None
+
+        if requested_total_weight > 0:
+            residue_variant_id = max(
+                variant_id
+                for variant_id, weight in (
+                    requested_weight_by_variant.items()
+                )
+                if weight > 0
+            )
+
+        for item in requested_items:
+            item_refund = Decimal("0.00")
+
+            if (
+                authoritative_refund > 0
+                and item.variant_id != residue_variant_id
+                and requested_weight_by_variant[
+                    item.variant_id
+                ] > 0
+            ):
+                item_refund = (
+                    authoritative_refund
+                    * requested_weight_by_variant[
+                        item.variant_id
+                    ]
+                    / requested_total_weight
+                ).quantize(
+                    money_unit,
+                    rounding=ROUND_DOWN,
+                )
+
+            item_refunds[item.variant_id] = item_refund
+            allocated_refund += item_refund
+
+        if residue_variant_id is not None:
+            item_refunds[residue_variant_id] = (
+                authoritative_refund
+                - allocated_refund
+            )
 
         # --------------------------------------------------
         # Generate Return Number
@@ -125,7 +636,7 @@ def create_sale_return(
             )
 
         # --------------------------------------------------
-        # Create Return Header
+        # Create Return Header after every validation succeeds.
         # --------------------------------------------------
 
         sale_return = SaleReturn(
@@ -134,8 +645,7 @@ def create_sale_return(
             customer_id=sale.customer_id,
             return_number=return_number,
             reason=data.reason,
-            refund_amount=
-                data.refund_amount,
+            refund_amount=authoritative_refund,
             status="Completed",
         )
 
@@ -146,280 +656,13 @@ def create_sale_return(
         db.flush()
 
         # ==================================================
-        # PROCESS EACH ITEM
+        # APPLY VALIDATED STOCK AND CREATE RETURN ITEMS
         # ==================================================
 
-        for item in data.items:
-
-            # ----------------------------------------------
-            # Lock SaleItem
-            # ----------------------------------------------
-
-            sale_item = (
-                db.query(SaleItem)
-                .filter(
-                    SaleItem.sale_id
-                    == sale.id,
-
-                    SaleItem.variant_id
-                    == item.variant_id,
-                )
-                .with_for_update(
-                    of=SaleItem
-                )
-                .first()
-            )
-
-            if not sale_item:
-                raise HTTPException(
-                    status_code=404,
-                    detail=(
-                        f"Variant "
-                        f"{item.variant_id} "
-                        f"not found in Sale "
-                        f"{sale.id}."
-                    ),
-                )
-
-            # ----------------------------------------------
-            # Find Variant and Lock It
-            # ----------------------------------------------
-
-            variant = (
-                db.query(
-                    ProductVariant
-                )
-                .join(
-                    Product,
-                    Product.id
-                    == ProductVariant.product_id,
-                )
-                .filter(
-                    ProductVariant.id
-                    == item.variant_id,
-
-                    Product.shop_id
-                    == shop_id,
-                )
-                .with_for_update(
-                    of=ProductVariant
-                )
-                .first()
-            )
-
-            if not variant:
-                raise HTTPException(
-                    status_code=404,
-                    detail="Variant not found.",
-                )
-
-            stock = (
-                db.query(Stock)
-                .filter(
-                    Stock.variant_id
-                    == variant.id,
-                )
-                .with_for_update(
-                    of=Stock
-                )
-                .first()
-            )
-
-            if not stock:
-                raise HTTPException(
-                    status_code=500,
-                    detail=(
-                        "Stock record not "
-                        "found for variant."
-                    ),
-                )
-
-            # ----------------------------------------------
-            # Validate Return Quantities
-            # ----------------------------------------------
-
-            if item.quantity <= 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Return quantity "
-                        "must be greater "
-                        "than zero."
-                    ),
-                )
-
-            if item.k_quantity < 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "K quantity cannot "
-                        "be negative."
-                    ),
-                )
-
-            if item.r_quantity < 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "R quantity cannot "
-                        "be negative."
-                    ),
-                )
-
-            if item.quantity != (
-                item.k_quantity
-                + item.r_quantity
-            ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        "Quantity must equal "
-                        "K Quantity + "
-                        "R Quantity."
-                    ),
-                )
-
-            # ----------------------------------------------
-            # Previously Returned K
-            # ----------------------------------------------
-
-            previous_k = (
-                db.query(
-                    func.coalesce(
-                        func.sum(
-                            SaleReturnItem
-                            .k_quantity
-                        ),
-                        0,
-                    )
-                )
-                .join(
-                    SaleReturn,
-                    SaleReturnItem
-                    .sale_return_id
-                    == SaleReturn.id,
-                )
-                .filter(
-                    SaleReturn.shop_id
-                    == shop_id,
-
-                    SaleReturn.sale_id
-                    == sale.id,
-
-                    SaleReturnItem.variant_id
-                    == item.variant_id,
-
-                    SaleReturn.status
-                    == "Completed",
-                )
-                .scalar()
-            )
-
-            # ----------------------------------------------
-            # Previously Returned R
-            # ----------------------------------------------
-
-            previous_r = (
-                db.query(
-                    func.coalesce(
-                        func.sum(
-                            SaleReturnItem
-                            .r_quantity
-                        ),
-                        0,
-                    )
-                )
-                .join(
-                    SaleReturn,
-                    SaleReturnItem
-                    .sale_return_id
-                    == SaleReturn.id,
-                )
-                .filter(
-                    SaleReturn.shop_id
-                    == shop_id,
-
-                    SaleReturn.sale_id
-                    == sale.id,
-
-                    SaleReturnItem.variant_id
-                    == item.variant_id,
-
-                    SaleReturn.status
-                    == "Completed",
-                )
-                .scalar()
-            )
-
-            previous_k = int(
-                previous_k or 0
-            )
-
-            previous_r = int(
-                previous_r or 0
-            )
-
-            # ----------------------------------------------
-            # Remaining Returnable
-            # ----------------------------------------------
-
-            remaining_k = (
-                sale_item.k_quantity
-                - previous_k
-            )
-
-            remaining_r = (
-                sale_item.r_quantity
-                - previous_r
-            )
-
-            if remaining_k < 0:
-                remaining_k = 0
-
-            if remaining_r < 0:
-                remaining_r = 0
-
-            # ----------------------------------------------
-            # Validate K Return
-            # ----------------------------------------------
-
-            if (
-                item.k_quantity
-                > remaining_k
-            ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Cannot return "
-                        f"{item.k_quantity} K "
-                        f"units for Variant "
-                        f"{item.variant_id}. "
-                        f"Only {remaining_k} "
-                        f"K units are still "
-                        f"returnable."
-                    ),
-                )
-
-            # ----------------------------------------------
-            # Validate R Return
-            # ----------------------------------------------
-
-            if (
-                item.r_quantity
-                > remaining_r
-            ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"Cannot return "
-                        f"{item.r_quantity} R "
-                        f"units for Variant "
-                        f"{item.variant_id}. "
-                        f"Only {remaining_r} "
-                        f"R units are still "
-                        f"returnable."
-                    ),
-                )
+        for item in requested_items:
+            sale_item = sale_items_by_variant[item.variant_id]
+            variant = variants_by_id[item.variant_id]
+            stock = stocks_by_variant[item.variant_id]
 
             # =================================================
             # INCREASE K STOCK
@@ -506,21 +749,6 @@ def create_sale_return(
                 )
 
             # ----------------------------------------------
-            # Calculate Refund
-            # ----------------------------------------------
-
-            item_refund = (
-                Decimal(
-                    str(
-                        sale_item.unit_price
-                    )
-                )
-                * Decimal(
-                    item.quantity
-                )
-            )
-
-            # ----------------------------------------------
             # Create Return Item
             # ----------------------------------------------
 
@@ -545,7 +773,9 @@ def create_sale_return(
                         sale_item.unit_price,
 
                     refund_amount=
-                        item_refund,
+                        item_refunds[
+                            item.variant_id
+                        ],
                 )
             )
 
