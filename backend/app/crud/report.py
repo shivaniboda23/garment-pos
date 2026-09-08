@@ -126,6 +126,108 @@ def _get_reconciled_sale_return_revenue_by_variant(
     return revenue_by_variant
 
 
+def _get_reconciled_sale_revenue_by_variant(
+    db: Session,
+    shop_id: int,
+):
+    """Allocate completed Sale headers across their stored item weights."""
+    money_unit = Decimal("0.01")
+    error_detail = "Product Analytics sale revenue reconciliation failed."
+
+    def money_cents(value):
+        try:
+            if value is None:
+                raise InvalidOperation
+
+            amount = Decimal(str(value))
+            if not amount.is_finite() or amount < 0:
+                raise InvalidOperation
+
+            return int(
+                (
+                    amount.quantize(money_unit, rounding=ROUND_HALF_UP)
+                    / money_unit
+                ).to_integral_value(rounding=ROUND_DOWN)
+            )
+        except (InvalidOperation, ValueError, TypeError):
+            raise HTTPException(status_code=500, detail=error_detail) from None
+
+    sales = (
+        db.query(Sale.id, Sale.total_amount)
+        .filter(
+            Sale.shop_id == shop_id,
+            Sale.status == "Completed",
+        )
+        .order_by(Sale.id.asc())
+        .all()
+    )
+    if not sales:
+        return {}
+
+    items = (
+        db.query(
+            SaleItem.id,
+            SaleItem.sale_id,
+            SaleItem.variant_id,
+            SaleItem.total_price,
+        )
+        .filter(SaleItem.sale_id.in_([sale.id for sale in sales]))
+        .order_by(
+            SaleItem.sale_id.asc(),
+            SaleItem.variant_id.asc(),
+            SaleItem.id.asc(),
+        )
+        .all()
+    )
+    items_by_sale = {sale.id: [] for sale in sales}
+    for item in items:
+        items_by_sale[item.sale_id].append(item)
+
+    revenue_by_variant = {}
+    for sale in sales:
+        header_cents = money_cents(sale.total_amount)
+        sale_items = items_by_sale[sale.id]
+        weights = [money_cents(item.total_price) for item in sale_items]
+        total_weight = sum(weights)
+
+        if header_cents == 0:
+            allocations = [0] * len(sale_items)
+        elif not sale_items or total_weight == 0:
+            raise HTTPException(status_code=500, detail=error_detail)
+        elif total_weight == header_cents:
+            allocations = weights
+        else:
+            allocations = []
+            remainders = []
+            for weight in weights:
+                floor_cents, remainder = divmod(
+                    header_cents * weight,
+                    total_weight,
+                )
+                allocations.append(floor_cents)
+                remainders.append(remainder)
+
+            residue_cents = header_cents - sum(allocations)
+            remainder_order = sorted(
+                range(len(sale_items)),
+                key=lambda index: (
+                    -remainders[index],
+                    sale_items[index].variant_id,
+                    sale_items[index].id,
+                ),
+            )
+            for index in remainder_order[:residue_cents]:
+                allocations[index] += 1
+
+        for item, allocated_cents in zip(sale_items, allocations):
+            revenue_by_variant[item.variant_id] = (
+                revenue_by_variant.get(item.variant_id, Decimal("0.00"))
+                + Decimal(allocated_cents) * money_unit
+            )
+
+    return revenue_by_variant
+
+
 def _get_specific_sale_return_cogs_by_variant(
     db: Session,
     shop_id: int,
@@ -1319,6 +1421,11 @@ def get_product_analytics(
     - low_stock
     """
 
+    gross_revenue_by_variant = _get_reconciled_sale_revenue_by_variant(
+        db=db,
+        shop_id=shop_id,
+    )
+
     # ======================================================
     # 1. ALL ACTIVE VARIANTS
     # ======================================================
@@ -1380,15 +1487,6 @@ def get_product_analytics(
                 0,
             ).label(
                 "units_sold"
-            ),
-
-            func.coalesce(
-                func.sum(
-                    SaleItem.total_price
-                ),
-                0,
-            ).label(
-                "gross_revenue"
             ),
 
             func.coalesce(
@@ -1503,18 +1601,18 @@ def get_product_analytics(
             )
         )
 
+        gross_revenue = (
+            gross_revenue_by_variant.get(
+                variant_id,
+                Decimal("0.00"),
+            )
+        )
+
         if sales_row:
 
             units_sold = int(
                 sales_row.units_sold
                 or 0
-            )
-
-            gross_revenue = Decimal(
-                str(
-                    sales_row.gross_revenue
-                    or 0
-                )
             )
 
             cogs = Decimal(
@@ -1527,10 +1625,6 @@ def get_product_analytics(
         else:
 
             units_sold = 0
-
-            gross_revenue = (
-                Decimal("0.00")
-            )
 
             cogs = (
                 Decimal("0.00")
