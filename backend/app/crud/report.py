@@ -126,6 +126,94 @@ def _get_reconciled_sale_return_revenue_by_variant(
     return revenue_by_variant
 
 
+def _get_specific_sale_return_cogs_by_variant(
+    db: Session,
+    shop_id: int,
+):
+    """Reverse each return item's unique historical sale cost snapshot."""
+    error_detail = "Product Analytics returned COGS reconciliation failed."
+    return_items = (
+        db.query(
+            SaleReturnItem.id.label("return_item_id"),
+            SaleReturn.id.label("sale_return_id"),
+            SaleReturn.sale_id,
+            SaleReturnItem.variant_id,
+            SaleReturnItem.quantity,
+            Sale.id.label("linked_sale_id"),
+            Sale.shop_id.label("sale_shop_id"),
+            Sale.status.label("sale_status"),
+        )
+        .select_from(SaleReturnItem)
+        .join(SaleReturn, SaleReturn.id == SaleReturnItem.sale_return_id)
+        # Keep invalid Sale links visible so validation cannot silently
+        # omit a completed return from the report.
+        .outerjoin(Sale, Sale.id == SaleReturn.sale_id)
+        .filter(
+            SaleReturn.shop_id == shop_id,
+            SaleReturn.status == "Completed",
+        )
+        .order_by(
+            SaleReturn.id.asc(),
+            SaleReturnItem.variant_id.asc(),
+            SaleReturnItem.id.asc(),
+        )
+        .all()
+    )
+    if not return_items:
+        return {}
+
+    for item in return_items:
+        if (
+            item.linked_sale_id is None
+            or item.sale_shop_id != shop_id
+            or item.sale_status != "Completed"
+            or item.quantity is None
+            or item.quantity <= 0
+        ):
+            raise HTTPException(status_code=500, detail=error_detail)
+
+    sale_ids = sorted({item.sale_id for item in return_items})
+    sale_items = (
+        db.query(
+            SaleItem.id,
+            SaleItem.sale_id,
+            SaleItem.variant_id,
+            SaleItem.cost_price,
+        )
+        .filter(SaleItem.sale_id.in_(sale_ids))
+        .order_by(
+            SaleItem.sale_id.asc(),
+            SaleItem.variant_id.asc(),
+            SaleItem.id.asc(),
+        )
+        .all()
+    )
+    sale_items_by_key = {}
+    for item in sale_items:
+        key = (item.sale_id, item.variant_id)
+        sale_items_by_key.setdefault(key, []).append(item)
+
+    returned_cogs_by_variant = {}
+    for item in return_items:
+        matches = sale_items_by_key.get((item.sale_id, item.variant_id), [])
+        if len(matches) != 1:
+            raise HTTPException(status_code=500, detail=error_detail)
+
+        try:
+            cost_price = Decimal(str(matches[0].cost_price or 0))
+            if not cost_price.is_finite() or cost_price < 0:
+                raise InvalidOperation
+        except (InvalidOperation, ValueError, TypeError):
+            raise HTTPException(status_code=500, detail=error_detail) from None
+
+        returned_cogs_by_variant[item.variant_id] = (
+            returned_cogs_by_variant.get(item.variant_id, Decimal("0.00"))
+            + Decimal(item.quantity) * cost_price
+        )
+
+    return returned_cogs_by_variant
+
+
 def get_cogs_for_sales(
     db: Session,
     shop_id: int,
@@ -1394,6 +1482,11 @@ def get_product_analytics(
         )
     )
 
+    returned_cogs_by_variant = _get_specific_sale_return_cogs_by_variant(
+        db=db,
+        shop_id=shop_id,
+    )
+
     # ======================================================
     # 5. BUILD ANALYTICS
     # ======================================================
@@ -1480,28 +1573,13 @@ def get_product_analytics(
             )
 
         # --------------------------------------------------
-        # AVERAGE HISTORICAL COST
+        # SPECIFIC HISTORICAL RETURN COST
         # --------------------------------------------------
 
-        if units_sold > 0:
-
-            average_cost = (
-                cogs
-                / Decimal(
-                    units_sold
-                )
-            )
-
-        else:
-
-            average_cost = (
-                Decimal("0.00")
-            )
-
         returned_cogs = (
-            average_cost
-            * Decimal(
-                units_returned
+            returned_cogs_by_variant.get(
+                variant_id,
+                Decimal("0.00"),
             )
         )
 
