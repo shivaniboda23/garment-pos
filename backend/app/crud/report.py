@@ -1,6 +1,7 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP
 from datetime import date
 
+from fastapi import HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,105 @@ from app.models.stock import Stock
 # ==========================================================
 # HELPERS
 # ==========================================================
+
+
+def _get_reconciled_sale_return_revenue_by_variant(
+    db: Session,
+    shop_id: int,
+):
+    """Allocate completed return headers before filtering active variants."""
+    money_unit = Decimal("0.01")
+    error_detail = "Product Analytics return revenue reconciliation failed."
+
+    def money_cents(value):
+        try:
+            amount = Decimal(str(value))
+            if not amount.is_finite() or amount < 0:
+                raise InvalidOperation
+            return int(
+                (
+                    amount.quantize(money_unit, rounding=ROUND_HALF_UP)
+                    / money_unit
+                ).to_integral_value(rounding=ROUND_DOWN)
+            )
+        except (InvalidOperation, ValueError, TypeError):
+            raise HTTPException(status_code=500, detail=error_detail) from None
+
+    returns = (
+        db.query(SaleReturn.id, SaleReturn.refund_amount)
+        .filter(
+            SaleReturn.shop_id == shop_id,
+            SaleReturn.status == "Completed",
+        )
+        .order_by(SaleReturn.id.asc())
+        .all()
+    )
+    if not returns:
+        return {}
+
+    items = (
+        db.query(
+            SaleReturnItem.id,
+            SaleReturnItem.sale_return_id,
+            SaleReturnItem.variant_id,
+            SaleReturnItem.refund_amount,
+        )
+        .filter(SaleReturnItem.sale_return_id.in_([row.id for row in returns]))
+        .order_by(
+            SaleReturnItem.sale_return_id.asc(),
+            SaleReturnItem.variant_id.asc(),
+            SaleReturnItem.id.asc(),
+        )
+        .all()
+    )
+    items_by_return = {row.id: [] for row in returns}
+    for item in items:
+        items_by_return[item.sale_return_id].append(item)
+
+    revenue_by_variant = {}
+    for sale_return in returns:
+        header_cents = money_cents(sale_return.refund_amount)
+        return_items = items_by_return[sale_return.id]
+        weights = [money_cents(item.refund_amount) for item in return_items]
+        total_weight = sum(weights)
+
+        if header_cents == 0:
+            allocations = [0] * len(return_items)
+        elif not return_items or total_weight == 0:
+            raise HTTPException(status_code=500, detail=error_detail)
+        elif total_weight == header_cents:
+            allocations = weights
+        else:
+            allocations = []
+            remainders = []
+            for weight in weights:
+                # Integer division gives exact floors and remainder ordering,
+                # without Decimal division rounding near a cent boundary.
+                floor_cents, remainder = divmod(
+                    header_cents * weight, total_weight
+                )
+                allocations.append(floor_cents)
+                remainders.append(remainder)
+
+            residue_cents = header_cents - sum(allocations)
+            remainder_order = sorted(
+                range(len(return_items)),
+                key=lambda index: (
+                    -remainders[index],
+                    return_items[index].variant_id,
+                    return_items[index].id,
+                ),
+            )
+            for index in remainder_order[:residue_cents]:
+                allocations[index] += 1
+
+        for item, allocated_cents in zip(return_items, allocations):
+            revenue_by_variant[item.variant_id] = (
+                revenue_by_variant.get(item.variant_id, Decimal("0.00"))
+                + Decimal(allocated_cents) * money_unit
+            )
+
+    return revenue_by_variant
 
 
 def get_cogs_for_sales(
@@ -1287,91 +1387,12 @@ def get_product_analytics(
     # 4. RETURNED REVENUE BY VARIANT
     # ======================================================
 
-    return_revenue_rows = (
-        db.query(
-            SaleReturnItem.variant_id.label(
-                "variant_id"
-            ),
-
-            SaleItem.unit_price.label(
-                "unit_price"
-            ),
-
-            func.coalesce(
-                func.sum(
-                    SaleReturnItem.quantity
-                ),
-                0,
-            ).label(
-                "returned_quantity"
-            ),
+    returned_revenue_by_variant = (
+        _get_reconciled_sale_return_revenue_by_variant(
+            db=db,
+            shop_id=shop_id,
         )
-        .select_from(
-            SaleReturnItem
-        )
-        .join(
-            SaleReturn,
-            SaleReturn.id
-            == SaleReturnItem.sale_return_id,
-        )
-        .join(
-            SaleItem,
-            (
-                SaleItem.sale_id
-                == SaleReturn.sale_id
-            )
-            & (
-                SaleItem.variant_id
-                == SaleReturnItem.variant_id
-            ),
-        )
-        .filter(
-            SaleReturn.shop_id == shop_id,
-            SaleReturn.status == "Completed",
-        )
-        .group_by(
-            SaleReturnItem.variant_id,
-            SaleItem.unit_price,
-        )
-        .all()
     )
-
-    returned_revenue_by_variant = {}
-
-    for row in return_revenue_rows:
-
-        returned_quantity = int(
-            row.returned_quantity
-            or 0
-        )
-
-        unit_price = Decimal(
-            str(
-                row.unit_price
-                or 0
-            )
-        )
-
-        amount = (
-            unit_price
-            * Decimal(
-                returned_quantity
-            )
-        )
-
-        existing = (
-            returned_revenue_by_variant.get(
-                row.variant_id,
-                Decimal("0.00"),
-            )
-        )
-
-        returned_revenue_by_variant[
-            row.variant_id
-        ] = (
-            existing
-            + amount
-        )
 
     # ======================================================
     # 5. BUILD ANALYTICS
