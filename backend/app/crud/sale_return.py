@@ -25,6 +25,14 @@ from app.models.bill_item import BillItem
 from app.services.stock_movement import (
     record_stock_movement,
 )
+from app.services.customer_receivable import (
+    sync_bill_payment_status,
+)
+
+
+RECEIVABLE_ERROR = (
+    "Customer receivable accounting integrity check failed."
+)
 
 
 # ==========================================================
@@ -70,6 +78,25 @@ def create_sale_return(
             raise HTTPException(
                 status_code=404,
                 detail="Sale not found.",
+            )
+
+        # The linked Bill is the shared receivable lock used by
+        # customer payments. Legacy Sales without Bills continue
+        # through the existing return path.
+        bill = (
+            db.query(Bill)
+            .filter(Bill.sale_id == sale.id)
+            .with_for_update(of=Bill)
+            .first()
+        )
+
+        if bill and (
+            bill.shop_id != shop_id
+            or bill.customer_id != sale.customer_id
+        ):
+            raise HTTPException(
+                status_code=500,
+                detail=RECEIVABLE_ERROR,
             )
 
         if sale.customer_id != data.customer_id:
@@ -155,15 +182,6 @@ def create_sale_return(
         # Modern bills provide the authoritative ordered
         # quantity. Sales without a Bill use their historical
         # delivered SaleItem quantity as the legacy fallback.
-        bill = (
-            db.query(Bill)
-            .filter(
-                Bill.sale_id == sale.id,
-                Bill.shop_id == shop_id,
-            )
-            .first()
-        )
-
         bill_items_by_variant = {}
 
         if bill:
@@ -654,6 +672,19 @@ def create_sale_return(
         )
 
         db.flush()
+
+        if bill:
+            try:
+                sync_bill_payment_status(
+                    db=db,
+                    shop_id=shop_id,
+                    bill=bill,
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail=RECEIVABLE_ERROR,
+                ) from exc
 
         # ==================================================
         # APPLY VALIDATED STOCK AND CREATE RETURN ITEMS

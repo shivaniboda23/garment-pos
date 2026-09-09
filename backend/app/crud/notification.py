@@ -1,4 +1,4 @@
-from sqlalchemy import func
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.stock import Stock
@@ -6,10 +6,13 @@ from app.models.product_variant import ProductVariant
 from app.models.product import Product
 
 from app.models.bill import Bill
-from app.models.payment import Payment
 from app.models.purchase import Purchase
 from app.models.customer import Customer
 from app.models.supplier import Supplier
+from app.services.customer_receivable import (
+    ZERO,
+    get_bill_receivable,
+)
 
 
 def get_notifications(
@@ -273,64 +276,45 @@ def get_notifications(
     #
     # Bill grand total
     # -
+    # completed Sale Returns
+    # -
     # total payments
     # ==========================================================
 
     customer_dues = (
-        db.query(
-            Bill.id.label(
-                "bill_id"
-            ),
-            Bill.invoice_number,
-            Bill.customer_id,
-            Bill.grand_total,
-            func.coalesce(
-                func.sum(
-                    Payment.amount
-                ),
-                0,
-            ).label(
-                "paid_amount"
-            ),
-        )
-        .select_from(Bill)
-        .outerjoin(
-            Payment,
-            Payment.bill_id
-            == Bill.id,
-        )
+        db.query(Bill)
         .filter(
             Bill.shop_id == shop_id,
             Bill.customer_id.isnot(
                 None
             ),
         )
-        .group_by(
-            Bill.id,
-            Bill.invoice_number,
-            Bill.customer_id,
-            Bill.grand_total,
-        )
         .all()
     )
 
     for bill in customer_dues:
-        grand_total = float(
-            bill.grand_total or 0
-        )
-
-        paid_amount = float(
-            bill.paid_amount or 0
-        )
-
-        due_amount = (
-            grand_total
-            - paid_amount
-        )
+        try:
+            state = get_bill_receivable(
+                db=db,
+                shop_id=shop_id,
+                bill=bill,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=(
+                    "Customer receivable accounting "
+                    "integrity check failed."
+                ),
+            ) from exc
 
         # Ignore fully paid bills.
-        if due_amount <= 0.01:
+        if state.due <= ZERO:
             continue
+
+        grand_total = float(state.original_total)
+        paid_amount = float(state.payments)
+        due_amount = float(state.due)
 
         customer_name = (
             "Customer"
@@ -368,7 +352,7 @@ def get_notifications(
                 ),
 
                 "bill_id":
-                    bill.bill_id,
+                    bill.id,
 
                 "invoice_number":
                     bill.invoice_number,
