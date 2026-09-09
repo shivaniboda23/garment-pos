@@ -8,6 +8,8 @@ from .stock import Stock
 from .customer import Customer
 from .sale import Sale
 from .sale_item import SaleItem
+from .sale_return import SaleReturn
+from .sale_return_item import SaleReturnItem
 from .bill import Bill
 from .bill_item import BillItem
 from .payment import Payment
@@ -19,6 +21,7 @@ from .purchase_return_item import PurchaseReturnItem
 from .expense_category import ExpenseCategory
 from .expense import Expense
 from app.models.supplier_payment import SupplierPayment
+from app.models.supplier_credit_application import SupplierCreditApplication
 from app.models.stock_movement import StockMovement
 from app.models.tailoring_job import TailoringJob
 from app.models.tailor_payment import TailorPayment
