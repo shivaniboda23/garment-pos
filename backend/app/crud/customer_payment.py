@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.bill import Bill
@@ -11,6 +10,34 @@ from app.models.payment import Payment
 from app.schemas.customer_payment import (
     CustomerPaymentCreate,
 )
+from app.services.customer_receivable import (
+    ZERO,
+    calculate_bill_receivable,
+    get_bill_receivable,
+)
+
+
+ACCOUNTING_ERROR = (
+    "Customer receivable accounting integrity check failed."
+)
+
+
+def _get_bill_receivable_or_500(
+    db: Session,
+    shop_id: int,
+    bill: Bill,
+):
+    try:
+        return get_bill_receivable(
+            db=db,
+            shop_id=shop_id,
+            bill=bill,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=ACCOUNTING_ERROR,
+        ) from exc
 
 
 # ==========================================================
@@ -61,6 +88,12 @@ def create_customer_payment(
             detail="Customer not found.",
         )
 
+    state = _get_bill_receivable_or_500(
+        db=db,
+        shop_id=shop_id,
+        bill=bill,
+    )
+
     amount = Decimal(
         str(data.amount)
     )
@@ -73,44 +106,7 @@ def create_customer_payment(
             ),
         )
 
-    total_paid = (
-        db.query(
-            func.coalesce(
-                func.sum(
-                    Payment.amount
-                ),
-                0,
-            )
-        )
-        .filter(
-            Payment.bill_id == bill.id,
-        )
-        .scalar()
-    )
-
-    total_paid = Decimal(
-        str(
-            total_paid or 0
-        )
-    )
-
-    grand_total = Decimal(
-        str(
-            bill.grand_total or 0
-        )
-    )
-
-    current_due = (
-        grand_total
-        - total_paid
-    )
-
-    if current_due < 0:
-        current_due = Decimal(
-            "0.00"
-        )
-
-    if current_due <= 0:
+    if state.due <= ZERO:
         raise HTTPException(
             status_code=400,
             detail=(
@@ -118,13 +114,13 @@ def create_customer_payment(
             ),
         )
 
-    if amount > current_due:
+    if amount > state.due:
         raise HTTPException(
             status_code=400,
             detail=(
                 f"Payment amount ₹{amount:.2f} "
                 f"exceeds outstanding balance "
-                f"₹{current_due:.2f}."
+                f"₹{state.due:.2f}."
             ),
         )
 
@@ -141,27 +137,12 @@ def create_customer_payment(
 
         db.add(payment)
 
-        new_paid = (
-            total_paid
-            + amount
+        new_state = calculate_bill_receivable(
+            original_total=state.original_total,
+            payments=state.payments + amount,
+            completed_returns=state.completed_returns,
         )
-
-        new_due = (
-            grand_total
-            - new_paid
-        )
-
-        if new_due < 0:
-            new_due = Decimal(
-                "0.00"
-            )
-
-        if new_paid >= grand_total:
-            bill.payment_status = "Paid"
-        elif new_paid > 0:
-            bill.payment_status = "Partial"
-        else:
-            bill.payment_status = "Pending"
+        bill.payment_status = new_state.payment_status
 
         db.commit()
 
@@ -253,71 +234,69 @@ def get_customer_due_summary(
     )
 
     invoice_rows = []
+    refundable_rows = []
 
-    total_billed = Decimal("0.00")
-    total_paid = Decimal("0.00")
-    total_due = Decimal("0.00")
+    total_billed = ZERO
+    total_returns = ZERO
+    total_effective_obligation = ZERO
+    total_paid = ZERO
+    total_due = ZERO
+    total_refundable_entitlement = ZERO
 
     for bill in bills:
-
-        paid = (
-            db.query(
-                func.coalesce(
-                    func.sum(
-                        Payment.amount
-                    ),
-                    0,
-                )
-            )
-            .filter(
-                Payment.bill_id == bill.id,
-            )
-            .scalar()
+        state = _get_bill_receivable_or_500(
+            db=db,
+            shop_id=shop_id,
+            bill=bill,
         )
 
-        paid = Decimal(
-            str(
-                paid or 0
-            )
+        total_billed += state.original_total
+        total_returns += state.completed_returns
+        total_effective_obligation += (
+            state.effective_obligation
+        )
+        total_paid += state.payments
+        total_due += state.due
+        total_refundable_entitlement += (
+            state.refundable_entitlement
         )
 
-        grand_total = Decimal(
-            str(
-                bill.grand_total or 0
-            )
-        )
-
-        due = (
-            grand_total
-            - paid
-        )
-
-        if due < 0:
-            due = Decimal(
-                "0.00"
-            )
-
-        total_billed += grand_total
-        total_paid += paid
-        total_due += due
-
-        if due > 0:
+        if state.due > ZERO:
             invoice_rows.append(
                 {
-                    "bill_id":
-                        bill.id,
-                    "invoice_number":
-                        bill.invoice_number,
-                    "grand_total":
-                        grand_total,
-                    "paid_amount":
-                        paid,
-                    "due_amount":
-                        due,
-                    "payment_status":
-                        "Pending",
-                    "created_at":
-                        bill.created_at,
+                    "bill_id": bill.id,
+                    "invoice_number": bill.invoice_number,
+                    "grand_total": state.original_total,
+                    "paid_amount": state.payments,
+                    "due_amount": state.due,
+                    "payment_status": state.payment_status,
+                    "returned_amount": state.completed_returns,
+                    "effective_obligation": (
+                        state.effective_obligation
+                    ),
+                    "refundable_entitlement": (
+                        state.refundable_entitlement
+                    ),
+                    "created_at": bill.created_at,
+                }
+            )
+
+        if state.refundable_entitlement > ZERO:
+            refundable_rows.append(
+                {
+                    "bill_id": bill.id,
+                    "invoice_number": bill.invoice_number,
+                    "grand_total": state.original_total,
+                    "returned_amount": state.completed_returns,
+                    "effective_obligation": (
+                        state.effective_obligation
+                    ),
+                    "paid_amount": state.payments,
+                    "refundable_entitlement": (
+                        state.refundable_entitlement
+                    ),
+                    "payment_status": state.payment_status,
+                    "created_at": bill.created_at,
                 }
             )
 
@@ -331,14 +310,26 @@ def get_customer_due_summary(
         "total_billed":
             total_billed,
 
+        "total_returns":
+            total_returns,
+
+        "total_effective_obligation":
+            total_effective_obligation,
+
         "total_paid":
             total_paid,
 
         "total_due":
             total_due,
 
+        "total_refundable_entitlement":
+            total_refundable_entitlement,
+
         "bills":
             invoice_rows,
+
+        "refundable_bills":
+            refundable_rows,
     }
 
 
@@ -376,74 +367,34 @@ def get_all_customer_dues(
             .all()
         )
 
-        total_billed = Decimal(
-            "0.00"
-        )
-
-        total_paid = Decimal(
-            "0.00"
-        )
-
-        total_due = Decimal(
-            "0.00"
-        )
+        total_billed = ZERO
+        total_returns = ZERO
+        total_effective_obligation = ZERO
+        total_paid = ZERO
+        total_due = ZERO
+        total_refundable_entitlement = ZERO
 
         for bill in bills:
-
-            paid = (
-                db.query(
-                    func.coalesce(
-                        func.sum(
-                            Payment.amount
-                        ),
-                        0,
-                    )
-                )
-                .filter(
-                    Payment.bill_id
-                    == bill.id,
-                )
-                .scalar()
+            state = _get_bill_receivable_or_500(
+                db=db,
+                shop_id=shop_id,
+                bill=bill,
             )
 
-            paid = Decimal(
-                str(
-                    paid or 0
-                )
+            total_billed += state.original_total
+            total_returns += state.completed_returns
+            total_effective_obligation += (
+                state.effective_obligation
             )
-
-            grand_total = Decimal(
-                str(
-                    bill.grand_total
-                    or 0
-                )
-            )
-
-            due = (
-                grand_total
-                - paid
-            )
-
-            if due < 0:
-                due = Decimal(
-                    "0.00"
-                )
-
-            total_billed += (
-                grand_total
-            )
-
-            total_paid += (
-                paid
-            )
-
-            total_due += (
-                due
+            total_paid += state.payments
+            total_due += state.due
+            total_refundable_entitlement += (
+                state.refundable_entitlement
             )
 
         # Only actual outstanding customers
         # appear in this endpoint.
-        if total_due <= 0:
+        if total_due <= ZERO:
             continue
 
         results.append(
@@ -460,11 +411,20 @@ def get_all_customer_dues(
                 "total_billed":
                     total_billed,
 
+                "total_returns":
+                    total_returns,
+
+                "total_effective_obligation":
+                    total_effective_obligation,
+
                 "total_paid":
                     total_paid,
 
                 "total_due":
                     total_due,
+
+                "total_refundable_entitlement":
+                    total_refundable_entitlement,
             }
         )
 
