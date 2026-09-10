@@ -505,16 +505,14 @@ def _find_psql() -> str:
     raise RuntimeError("PostgreSQL psql client was not found")
 
 
-def _psql_environment() -> dict[str, str]:
-    if str(BACKEND_ROOT) not in sys.path:
-        sys.path.insert(0, str(BACKEND_ROOT))
-    from app.core.config import DATABASE_URL
-
-    parsed = urlsplit(DATABASE_URL)
+def _connection_environment(
+    database_url: str, expected_database: str
+) -> dict[str, str]:
+    parsed = urlsplit(database_url)
     database_name = unquote(parsed.path.lstrip("/"))
-    if database_name != EXPECTED_DATABASE:
+    if database_name != expected_database:
         raise RuntimeError(
-            f"Schema export aborted: expected database {EXPECTED_DATABASE!r}, "
+            f"Schema export aborted: expected database {expected_database!r}, "
             f"received {database_name!r}"
         )
 
@@ -534,6 +532,14 @@ def _psql_environment() -> dict[str, str]:
     if "sslmode" in query_options:
         environment["PGSSLMODE"] = query_options["sslmode"][-1]
     return environment
+
+
+def _psql_environment(expected_database: str) -> dict[str, str]:
+    if str(BACKEND_ROOT) not in sys.path:
+        sys.path.insert(0, str(BACKEND_ROOT))
+    from app.core.config import DATABASE_URL
+
+    return _connection_environment(DATABASE_URL, expected_database)
 
 
 SECTION_PREFIX = "__BHAVANI_SCHEMA_CONTRACT__"
@@ -579,7 +585,7 @@ FROM (
 {_query_error_guard()}"""
 
 
-def _snapshot_script() -> str:
+def _snapshot_script(expected_database: str) -> str:
     sections = "".join(
         _labelled_json_query(label, query, order)
         for label, query, order in SNAPSHOT_QUERIES
@@ -587,7 +593,7 @@ def _snapshot_script() -> str:
     return f"""\\set ON_ERROR_STOP off
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 {_query_error_guard()}SELECT
-    current_database() = '{EXPECTED_DATABASE}' AS database_ok,
+    current_database() = '{expected_database}' AS database_ok,
     current_setting('transaction_read_only') = 'on' AS read_only_ok
 \\gset contract_
 {_query_error_guard()}\\if :contract_database_ok
@@ -637,7 +643,7 @@ def _parse_snapshot_output(output: str) -> dict[str, list[dict[str, Any]]]:
 
 
 def _run_snapshot(
-    psql: str, environment: dict[str, str]
+    psql: str, environment: dict[str, str], expected_database: str
 ) -> dict[str, list[dict[str, Any]]]:
     result = subprocess.run(
         [
@@ -648,7 +654,7 @@ def _run_snapshot(
             "--tuples-only",
             "--file=-",
         ],
-        input=_snapshot_script(),
+        input=_snapshot_script(expected_database),
         env=environment,
         check=False,
         capture_output=True,
@@ -669,13 +675,13 @@ def _group_by_table(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]
 
 
 def _build_contract(
-    sections: dict[str, list[dict[str, Any]]]
+    sections: dict[str, list[dict[str, Any]]], expected_database: str
 ) -> dict[str, Any]:
     provenance_rows = sections["provenance"]
     if len(provenance_rows) != 1:
         raise RuntimeError("Expected exactly one provenance row")
     provenance = provenance_rows[0]
-    if provenance["database_name"] != EXPECTED_DATABASE:
+    if provenance["database_name"] != expected_database:
         raise RuntimeError("Schema export database verification failed")
     if provenance["transaction_read_only"] != "on":
         raise RuntimeError("Schema export transaction was not read only")
@@ -853,14 +859,18 @@ def _validate_contract_counts(contract: dict[str, Any]) -> None:
         raise RuntimeError("Physical-index category counts do not reconcile")
 
 
-def export_contract() -> dict[str, Any]:
+def export_contract(expected_database: str = EXPECTED_DATABASE) -> dict[str, Any]:
     psql = _find_psql()
-    environment = _psql_environment()
-    return _build_contract(_run_snapshot(psql, environment))
+    environment = _psql_environment(expected_database)
+    return _build_contract(
+        _run_snapshot(psql, environment, expected_database), expected_database
+    )
 
 
-def export_to_path(output_path: Path) -> dict[str, Any]:
-    contract = export_contract()
+def export_to_path(
+    output_path: Path, expected_database: str = EXPECTED_DATABASE
+) -> dict[str, Any]:
+    contract = export_contract(expected_database)
     rendered = render_contract(contract)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -895,12 +905,20 @@ def main() -> int:
         required=True,
         help="Destination JSON file",
     )
+    parser.add_argument(
+        "--expected-database",
+        default=EXPECTED_DATABASE,
+        help=(
+            "Required database identity; defaults to the authoritative "
+            f"{EXPECTED_DATABASE} database"
+        ),
+    )
     arguments = parser.parse_args()
 
-    contract = export_to_path(arguments.output)
+    contract = export_to_path(arguments.output, arguments.expected_database)
     print(
         f"Exported {contract['application_table_count']} application tables "
-        f"from {EXPECTED_DATABASE}."
+        f"from {arguments.expected_database}."
     )
     return 0
 

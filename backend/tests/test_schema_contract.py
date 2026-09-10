@@ -446,6 +446,21 @@ class SchemaContractTests(unittest.TestCase):
                     exporter.export_contract()
                 run.assert_called_once()
 
+    def test_nondefault_database_requires_explicit_expected_name(self) -> None:
+        database_url = "postgresql://contract_user:secret@localhost/disposable_schema"
+        with self.assertRaisesRegex(RuntimeError, "expected database"):
+            exporter._connection_environment(
+                database_url, exporter.EXPECTED_DATABASE
+            )
+
+        environment = exporter._connection_environment(
+            database_url, "disposable_schema"
+        )
+        self.assertEqual("disposable_schema", environment["PGDATABASE"])
+        self.assertEqual(
+            "-c default_transaction_read_only=on", environment["PGOPTIONS"]
+        )
+
     def test_canonical_rendering_is_deterministic_for_fixture(self) -> None:
         first = {"z": [3, 2, 1], "a": {"second": 2, "first": 1}}
         second = {"a": {"first": 1, "second": 2}, "z": [3, 2, 1]}
