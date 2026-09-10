@@ -35,6 +35,20 @@ RECEIVABLE_ERROR = (
 )
 
 
+def _validate_sale_return_customer(
+    sale_customer_id,
+    requested_customer_id,
+) -> None:
+    if sale_customer_id != requested_customer_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Customer does not match "
+                "the selected sale."
+            ),
+        )
+
+
 # ==========================================================
 # Generate Return Number
 # ==========================================================
@@ -99,14 +113,10 @@ def create_sale_return(
                 detail=RECEIVABLE_ERROR,
             )
 
-        if sale.customer_id != data.customer_id:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "Customer does not match "
-                    "the selected sale."
-                ),
-            )
+        _validate_sale_return_customer(
+            sale_customer_id=sale.customer_id,
+            requested_customer_id=data.customer_id,
+        )
 
         if not data.items:
             raise HTTPException(

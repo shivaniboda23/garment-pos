@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -20,6 +20,24 @@ from app.services.customer_receivable import (
 ACCOUNTING_ERROR = (
     "Customer receivable accounting integrity check failed."
 )
+
+
+def _validated_payment_amount(value) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment amount must be a finite value greater than zero.",
+        ) from exc
+
+    if not amount.is_finite() or amount <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment amount must be a finite value greater than zero.",
+        )
+
+    return amount
 
 
 def _get_bill_receivable_or_500(
@@ -49,6 +67,8 @@ def create_customer_payment(
     shop_id: int,
     data: CustomerPaymentCreate,
 ):
+    amount = _validated_payment_amount(data.amount)
+
     bill = (
         db.query(Bill)
         .filter(
@@ -93,18 +113,6 @@ def create_customer_payment(
         shop_id=shop_id,
         bill=bill,
     )
-
-    amount = Decimal(
-        str(data.amount)
-    )
-
-    if amount <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Payment amount must be greater than zero."
-            ),
-        )
 
     if state.due <= ZERO:
         raise HTTPException(

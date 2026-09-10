@@ -24,6 +24,10 @@ ALEMBIC_INI = BACKEND_ROOT / "alembic.ini"
 ALEMBIC_ROOT = BACKEND_ROOT / "alembic"
 CANONICAL_VERSIONS = ALEMBIC_ROOT / "canonical_versions"
 HISTORICAL_VERSIONS = ALEMBIC_ROOT / "versions"
+CANONICAL_BASELINE = (
+    CANONICAL_VERSIONS / "b1c27a4e6f0_canonical_erp_schema_baseline.py"
+)
+FINANCIAL_INTEGRITY_REVISION = "b2e4f8a1c3d5"
 CONTRACT_PATH = (
     BACKEND_ROOT / "schema_contract" / "bhavani_erp_v2_live_schema.json"
 )
@@ -79,15 +83,15 @@ def _canonical_files() -> list[Path]:
 
 
 def _load_migration():
-    files = _canonical_files()
-    if len(files) != 1:
-        raise AssertionError(f"Expected one canonical revision file, found {files}")
-    spec = importlib.util.spec_from_file_location("canonical_baseline", files[0])
+    spec = importlib.util.spec_from_file_location(
+        "canonical_baseline",
+        CANONICAL_BASELINE,
+    )
     if spec is None or spec.loader is None:
-        raise AssertionError(f"Cannot load canonical revision: {files[0]}")
+        raise AssertionError(f"Cannot load canonical revision: {CANONICAL_BASELINE}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return files[0], module
+    return CANONICAL_BASELINE, module
 
 
 class CanonicalAlembicBaselineTests(unittest.TestCase):
@@ -123,17 +127,25 @@ class CanonicalAlembicBaselineTests(unittest.TestCase):
         self.assertEqual({CANONICAL_VERSIONS.resolve()}, configured_locations)
         self.assertNotIn(HISTORICAL_VERSIONS.resolve(), configured_locations)
 
-    def test_one_active_revision_is_root_and_head(self) -> None:
+    def test_canonical_chain_has_one_root_and_financial_integrity_head(self) -> None:
         config = Config(str(ALEMBIC_INI))
         scripts = ScriptDirectory.from_config(config)
         revisions = list(scripts.walk_revisions())
 
-        self.assertEqual(1, len(_canonical_files()))
-        self.assertEqual(1, len(revisions))
-        self.assertIsNone(revisions[0].down_revision)
-        self.assertEqual([revisions[0].revision], scripts.get_bases())
-        self.assertEqual([revisions[0].revision], scripts.get_heads())
-        self.assertEqual("b1c27a4e6f0", revisions[0].revision)
+        self.assertEqual(2, len(_canonical_files()))
+        self.assertEqual(2, len(revisions))
+        revisions_by_id = {item.revision: item for item in revisions}
+        self.assertEqual(
+            {"b1c27a4e6f0", FINANCIAL_INTEGRITY_REVISION},
+            set(revisions_by_id),
+        )
+        self.assertIsNone(revisions_by_id["b1c27a4e6f0"].down_revision)
+        self.assertEqual(
+            "b1c27a4e6f0",
+            revisions_by_id[FINANCIAL_INTEGRITY_REVISION].down_revision,
+        )
+        self.assertEqual(["b1c27a4e6f0"], scripts.get_bases())
+        self.assertEqual([FINANCIAL_INTEGRITY_REVISION], scripts.get_heads())
 
     def test_historical_migrations_match_commit_524f768(self) -> None:
         actual_files = {

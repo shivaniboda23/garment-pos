@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     Integer,
     Numeric,
@@ -13,6 +14,14 @@ from app.db.database import Base
 
 class Payment(Base):
     __tablename__ = "payments"
+
+    __table_args__ = (
+        CheckConstraint(
+            "amount > 0 AND amount::text NOT IN "
+            "('NaN', 'Infinity', '-Infinity')",
+            name="ck_payments_amount_positive_finite",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 
