@@ -4,6 +4,7 @@ from sqlalchemy import (
     Numeric,
     String,
     ForeignKey,
+    ForeignKeyConstraint,
     DateTime,
     func,
 )
@@ -15,6 +16,19 @@ from app.db.database import Base
 
 class SaleReturn(Base):
     __tablename__ = "sale_returns"
+
+    # MATCH SIMPLE intentionally leaves a null customer_id to the
+    # application's existing null-safe equality validation.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["sale_id", "customer_id"],
+            ["sales.id", "sales.customer_id"],
+            name="fk_sale_returns_sale_customer",
+            match="SIMPLE",
+            onupdate="NO ACTION",
+            ondelete="CASCADE",
+        ),
+    )
 
     id = Column(
         Integer,
@@ -35,7 +49,7 @@ class SaleReturn(Base):
         Integer,
         ForeignKey(
             "sales.id",
-            ondelete="RESTRICT",
+            ondelete="CASCADE",
         ),
         nullable=False,
     )
@@ -80,6 +94,7 @@ class SaleReturn(Base):
 
     sale = relationship(
         "Sale",
+        foreign_keys=[sale_id],
     )
 
     customer = relationship(

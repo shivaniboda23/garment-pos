@@ -6,6 +6,7 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     func,
+    UniqueConstraint,
 )
 
 from sqlalchemy.orm import relationship
@@ -15,6 +16,14 @@ from app.db.database import Base
 
 class Sale(Base):
     __tablename__ = "sales"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "id",
+            "customer_id",
+            name="uq_sales_id_customer_id",
+        ),
+    )
 
     id = Column(
         Integer,
