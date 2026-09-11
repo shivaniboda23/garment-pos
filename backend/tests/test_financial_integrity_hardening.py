@@ -35,10 +35,16 @@ SALE_RETURNS_CUSTOMER_FK = "fk_sale_returns_sale_customer"
 
 MODEL_METADATA_SCRIPT = r"""
 import json
+import app.models
 from sqlalchemy import CheckConstraint, ForeignKeyConstraint, UniqueConstraint
+from sqlalchemy import inspect
+from sqlalchemy.orm import configure_mappers
 from app.models.payment import Payment
 from app.models.sale import Sale
 from app.models.sale_return import SaleReturn
+
+configure_mappers()
+sale_relationship = inspect(SaleReturn).relationships["sale"]
 
 payment_checks = [
     {
@@ -72,6 +78,9 @@ print(json.dumps({
     "payment_checks": payment_checks,
     "sale_uniques": sale_uniques,
     "sale_return_foreign_keys": sale_return_foreign_keys,
+    "sale_relationship_local_columns": sorted(
+        column.name for column in sale_relationship.local_columns
+    ),
 }, sort_keys=True))
 """
 
@@ -396,6 +405,16 @@ class FinancialIntegrityModelTests(unittest.TestCase):
                 }
             ],
             self.metadata["payment_checks"],
+        )
+
+    def test_all_models_configure_and_sale_return_sale_uses_only_sale_id(self):
+        self.assertEqual(
+            ["sale_id"],
+            self.metadata["sale_relationship_local_columns"],
+        )
+        self.assertNotIn(
+            "customer_id",
+            self.metadata["sale_relationship_local_columns"],
         )
 
     def test_sales_parent_unique_metadata(self):

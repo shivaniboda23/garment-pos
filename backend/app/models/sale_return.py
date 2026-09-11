@@ -94,6 +94,7 @@ class SaleReturn(Base):
 
     sale = relationship(
         "Sale",
+        foreign_keys=[sale_id],
     )
 
     customer = relationship(
