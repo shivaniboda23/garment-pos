@@ -1,3 +1,4 @@
+from datetime import timezone
 from decimal import Decimal
 
 from fastapi import HTTPException
@@ -18,6 +19,47 @@ from app.services.supplier_accounting import (
     get_purchase_accounting,
     get_supplier_accounting,
 )
+
+
+def _sort_supplier_ledger_transactions(
+    transactions,
+):
+    comparison_timezone = next(
+        (
+            transaction["date"].tzinfo
+            for transaction in transactions
+            if (
+                transaction["date"].tzinfo is not None
+                and transaction["date"].utcoffset()
+                is not None
+            )
+        ),
+        None,
+    )
+
+    def comparison_date(transaction):
+        value = transaction["date"]
+
+        if comparison_timezone is None:
+            return value
+
+        if (
+            value.tzinfo is None
+            or value.utcoffset() is None
+        ):
+            value = value.replace(
+                tzinfo=comparison_timezone,
+            )
+
+        return value.astimezone(timezone.utc)
+
+    transactions.sort(
+        key=lambda transaction: (
+            comparison_date(transaction),
+            transaction["priority"],
+            transaction["id"],
+        )
+    )
 
 
 # ==========================================================
@@ -769,12 +811,8 @@ def get_supplier_ledger(
             }
         )
 
-    transactions.sort(
-        key=lambda transaction: (
-            transaction["date"],
-            transaction["priority"],
-            transaction["id"],
-        )
+    _sort_supplier_ledger_transactions(
+        transactions,
     )
 
     running_balance = Decimal(
