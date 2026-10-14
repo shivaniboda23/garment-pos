@@ -9,6 +9,9 @@ HOST = os.getenv("HOST", "127.0.0.1")
 PORT = int(os.getenv("PORT", 8000))
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+PUBLIC_REGISTRATION_ENABLED = (
+    os.getenv("PUBLIC_REGISTRATION_ENABLED", "false").strip().lower() == "true"
+)
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 1440)

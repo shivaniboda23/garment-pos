@@ -15,8 +15,10 @@ from app.schemas.auth import (
 from app.crud.auth import (
     register_shop,
     authenticate_user,
+    DuplicateEmailError,
 )
 from app.core.token import create_access_token
+from app.core.config import PUBLIC_REGISTRATION_ENABLED
 
 router = APIRouter(
     prefix="/auth",
@@ -29,6 +31,9 @@ def register(
     request: ShopRegisterRequest,
     db: Session = Depends(get_db),
 ):
+    if not PUBLIC_REGISTRATION_ENABLED:
+        raise HTTPException(status_code=404, detail="Not found")
+
     try:
         shop = register_shop(db, request)
 
@@ -38,11 +43,10 @@ def register(
             "shop_name": shop.shop_name,
         }
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e),
-        )
+    except DuplicateEmailError:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    except Exception:
+        raise HTTPException(status_code=500, detail="Registration failed")
 
 
 @router.post(

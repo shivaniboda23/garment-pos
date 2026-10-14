@@ -11,6 +11,10 @@ from app.core.security import (
 )
 
 
+class DuplicateEmailError(ValueError):
+    """A shop administrator already uses this email address."""
+
+
 def register_shop(db: Session, data):
 
     existing = db.scalar(
@@ -18,7 +22,7 @@ def register_shop(db: Session, data):
     )
 
     if existing:
-        raise Exception("Email already registered")
+        raise DuplicateEmailError("Email already registered")
 
     shop = Shop(
         shop_name=data.shop_name,
@@ -57,7 +61,7 @@ def authenticate_user(
         select(User).where(User.email == email)
     )
 
-    if not user:
+    if not user or not user.is_active:
         return None
 
     if not verify_password(password, user.password):

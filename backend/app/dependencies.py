@@ -26,23 +26,27 @@ def get_current_user(
 
     payload = verify_access_token(token)
 
-    if payload is None:
-
+    if not isinstance(payload, dict):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
 
-    user = db.get(
-        User,
-        payload["user_id"],
-    )
-
-    if user is None:
-
+    user_id = payload.get("user_id")
+    shop_id = payload.get("shop_id")
+    if (
+        not isinstance(user_id, int)
+        or isinstance(user_id, bool)
+        or not isinstance(shop_id, int)
+        or isinstance(shop_id, bool)
+    ):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
+        )
+
+    user = db.get(User, user_id)
+    if user is None or not user.is_active or user.shop_id != shop_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
 
     return user
