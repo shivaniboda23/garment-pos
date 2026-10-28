@@ -569,6 +569,9 @@ def create_bill(
                     "variant_id":
                         variant.id,
 
+                    "receipt_sku":
+                        variant.sku,
+
                     "ordered_qty":
                         ordered_qty,
 
@@ -1034,6 +1037,13 @@ def create_bill(
             customer_id=
                 data.customer_id,
 
+            receipt_customer_name=(
+                customer.customer_name if customer else "Walk-in Customer"
+            ),
+            receipt_customer_phone=(
+                customer.phone if customer else None
+            ),
+
             invoice_number=
                 invoice_number,
 
@@ -1090,6 +1100,11 @@ def create_bill(
                 variant_id=
                     row[
                         "variant_id"
+                    ],
+
+                receipt_sku=
+                    row[
+                        "receipt_sku"
                     ],
 
                 ordered_qty=

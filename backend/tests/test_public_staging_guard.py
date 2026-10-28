@@ -111,14 +111,14 @@ class PublicStagingGuardTests(unittest.TestCase):
             self.assertIs(user, dependencies.get_current_user("token", FakeDatabase(user)))
 
     def test_bootstrap_requires_fresh_staging_schema_and_matching_name(self):
-        _validate_target("bhavani_staging_demo", "b2e4f8a1c3d5", 0, 0,
+        _validate_target("bhavani_staging_demo", "c8f0a2d4e6b1", 0, 0,
                          "bhavani_staging_demo")
         for actual, revision, shops, users, expected in (
-            ("bhavani_erp_v2", "b2e4f8a1c3d5", 0, 0, "bhavani_erp_v2"),
-            ("bhavani_staging_wrong", "b2e4f8a1c3d5", 0, 0, "bhavani_staging_demo"),
+            ("bhavani_erp_v2", "c8f0a2d4e6b1", 0, 0, "bhavani_erp_v2"),
+            ("bhavani_staging_wrong", "c8f0a2d4e6b1", 0, 0, "bhavani_staging_demo"),
             ("bhavani_staging_demo", "b1c27a4e6f0", 0, 0, "bhavani_staging_demo"),
-            ("bhavani_staging_demo", "b2e4f8a1c3d5", 1, 0, "bhavani_staging_demo"),
-            ("bhavani_staging_demo", "b2e4f8a1c3d5", 0, 1, "bhavani_staging_demo"),
+            ("bhavani_staging_demo", "c8f0a2d4e6b1", 1, 0, "bhavani_staging_demo"),
+            ("bhavani_staging_demo", "c8f0a2d4e6b1", 0, 1, "bhavani_staging_demo"),
         ):
             with self.subTest(actual=actual, revision=revision, shops=shops, users=users):
                 with self.assertRaises(ValueError):

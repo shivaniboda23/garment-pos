@@ -127,16 +127,16 @@ class CanonicalAlembicBaselineTests(unittest.TestCase):
         self.assertEqual({CANONICAL_VERSIONS.resolve()}, configured_locations)
         self.assertNotIn(HISTORICAL_VERSIONS.resolve(), configured_locations)
 
-    def test_canonical_chain_has_one_root_and_financial_integrity_head(self) -> None:
+    def test_canonical_chain_has_one_root_and_receipt_snapshot_head(self) -> None:
         config = Config(str(ALEMBIC_INI))
         scripts = ScriptDirectory.from_config(config)
         revisions = list(scripts.walk_revisions())
 
-        self.assertEqual(2, len(_canonical_files()))
-        self.assertEqual(2, len(revisions))
+        self.assertEqual(3, len(_canonical_files()))
+        self.assertEqual(3, len(revisions))
         revisions_by_id = {item.revision: item for item in revisions}
         self.assertEqual(
-            {"b1c27a4e6f0", FINANCIAL_INTEGRITY_REVISION},
+            {"b1c27a4e6f0", FINANCIAL_INTEGRITY_REVISION, "c8f0a2d4e6b1"},
             set(revisions_by_id),
         )
         self.assertIsNone(revisions_by_id["b1c27a4e6f0"].down_revision)
@@ -145,7 +145,9 @@ class CanonicalAlembicBaselineTests(unittest.TestCase):
             revisions_by_id[FINANCIAL_INTEGRITY_REVISION].down_revision,
         )
         self.assertEqual(["b1c27a4e6f0"], scripts.get_bases())
-        self.assertEqual([FINANCIAL_INTEGRITY_REVISION], scripts.get_heads())
+        self.assertEqual(FINANCIAL_INTEGRITY_REVISION,
+                         revisions_by_id["c8f0a2d4e6b1"].down_revision)
+        self.assertEqual(["c8f0a2d4e6b1"], scripts.get_heads())
 
     def test_historical_migrations_match_commit_524f768(self) -> None:
         actual_files = {

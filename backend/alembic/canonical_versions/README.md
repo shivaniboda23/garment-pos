@@ -74,3 +74,12 @@ inserts fail inside transactions that are rolled back. Preserve the rehearsal
 logs, compare aggregate row counts before and after, and discard the disposable
 database if any assertion differs. Downgrade is intentionally unavailable
 because it cannot reconstruct the deleted or corrected historical rows.
+
+## Receipt identity snapshots
+
+Revision `c8f0a2d4e6b1` adds nullable customer name/phone columns on bills and
+a nullable SKU column on bill items. Bills created after this revision capture
+those values in the billing transaction. Existing bills remain NULL; their
+original customer or catalog values cannot be safely inferred from current
+records. Rehearse the additive migration on staging before deployment. Do not
+run the canonical root against an existing database.

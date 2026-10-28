@@ -179,9 +179,9 @@ class FinancialIntegrityMigrationTests(unittest.TestCase):
     def test_revision_is_the_only_head_after_canonical_root(self):
         scripts = ScriptDirectory.from_config(Config(str(ALEMBIC_INI)))
         revisions = {item.revision: item for item in scripts.walk_revisions()}
-        self.assertEqual({DOWN_REVISION, REVISION}, set(revisions))
+        self.assertEqual({DOWN_REVISION, REVISION, "c8f0a2d4e6b1"}, set(revisions))
         self.assertEqual([DOWN_REVISION], scripts.get_bases())
-        self.assertEqual([REVISION], scripts.get_heads())
+        self.assertEqual(["c8f0a2d4e6b1"], scripts.get_heads())
         self.assertEqual(DOWN_REVISION, revisions[REVISION].down_revision)
 
     def test_migration_contains_no_hardcoded_record_or_private_data(self):

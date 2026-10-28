@@ -55,6 +55,10 @@ class Bill(Base):
         nullable=True,
     )
 
+    # Captured at billing time. Null on bills created before this feature.
+    receipt_customer_name = Column(String(200), nullable=True)
+    receipt_customer_phone = Column(String(15), nullable=True)
+
     subtotal = Column(
         Numeric(12, 2),
         default=0,
