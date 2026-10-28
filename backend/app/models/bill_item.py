@@ -37,6 +37,9 @@ class BillItem(Base):
         nullable=False,
     )
 
+    # Keep the code sold even if the product catalog changes later.
+    receipt_sku = Column(String(100), nullable=True)
+
     # -----------------------------
     # Ordered Quantity
     # -----------------------------

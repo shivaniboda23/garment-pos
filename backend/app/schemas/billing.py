@@ -270,6 +270,8 @@ class BillItemResponse(BaseModel):
         int
     ] = None
 
+    receipt_sku: Optional[str] = None
+
     product_id: Optional[
         int
     ] = None
@@ -345,6 +347,8 @@ class BillResponse(BaseModel):
     customer_id: Optional[
         int
     ]
+    receipt_customer_name: Optional[str] = None
+    receipt_customer_phone: Optional[str] = None
 
     subtotal: Decimal
 

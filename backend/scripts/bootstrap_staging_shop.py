@@ -21,7 +21,7 @@ def _validate_target(database_name, revision, shops, users, expected_name):
         raise ValueError("Expected database name must start with bhavani_staging_.")
     if database_name != expected_name:
         raise ValueError("Connected database does not match --expected-db.")
-    if revision != "b2e4f8a1c3d5":
+    if revision != "c8f0a2d4e6b1":
         raise ValueError("Staging database is not at the reviewed Alembic head.")
     if shops != 0 or users != 0:
         raise ValueError("Staging database already has a shop or user.")
