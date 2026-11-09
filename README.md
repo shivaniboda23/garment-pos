@@ -1,55 +1,31 @@
-# 🏪 Garment Billing System
+# Bhavani Garments ERP / POS
 
-A full-stack billing and inventory management system designed for garment stores. The application simplifies billing, manages inventory, tracks customers, and generates sales reports through an intuitive interface.
+An Android billing demo for a garment store, supported by a FastAPI backend and PostgreSQL.
 
-## ✨ Features
+▶ [Watch the 71-second Android demo](https://www.youtube.com/shorts/AetLj_i7bn4)
 
-- 🧾 Fast POS Billing
-- 👕 Product & Inventory Management
-- 👥 Customer Management
-- 💰 Sales Reports
-- 📱 Mobile Responsive Interface
-- 🔐 Secure Authentication
-- 🗄 PostgreSQL Database
+## What the demo shows
 
-## 🛠 Tech Stack
+- Finding garment items by SKU
+- Creating a customer bill and tracking the amount due
+- Generating a PDF receipt with the saved customer name and item SKU
+- Reopening a receipt from Bill History
 
-- React.js
-- Vite
-- Node.js
-- Express.js
-- PostgreSQL
-- JavaScript
-- HTML
-- CSS
+## Technology
 
-## 📂 Project Structure
+- Android app: Flutter
+- Backend: Python, FastAPI, SQLAlchemy 2, Alembic
+- Database: PostgreSQL
+- Staging: Render web service with a Neon database
 
-frontend/
-backend/
-database/
+The demonstrated Android app is an installed APK. It is not a Play Store release. The staging service may take a short time to wake after inactivity.
 
-## 🚀 Getting Started
+## Repositories
 
-```bash
-git clone <repo-url>
-cd garment-billing-system
-npm install
-npm run dev
-```
+- [Backend and project code](https://github.com/shivaniboda23/garment-pos)
 
-## 📸 Screenshots
+The Android app source is private. Watch the demo video above to see it running.
 
-(Add screenshots here)
-
-## 🎯 Future Improvements
-
-- Barcode Scanner
-- GST Invoice Generation
-- SMS Notifications
-- Online Payment Integration
-- Analytics Dashboard
-
-## 👩‍💻 Author
+## Author
 
 Shivani Boda
